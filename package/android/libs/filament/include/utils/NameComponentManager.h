@@ -47,7 +47,7 @@ class EntityManager;
  * printf("%s\n", names->getName(names->getInstance(myEntity));
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-class UTILS_PUBLIC NameComponentManager : private SingleInstanceComponentManager<CString> {
+class UTILS_PUBLIC NameComponentManager : private SingleInstanceComponentManager<utils::CString> {
 public:
     using Instance = EntityInstance<NameComponentManager>;
 
@@ -97,7 +97,7 @@ public:
     const char* getName(Instance instance) const noexcept;
 
     void gc(EntityManager& em) noexcept {
-        SingleInstanceComponentManager<CString>::gc(em, [this](Entity e) {
+        SingleInstanceComponentManager<utils::CString>::gc(em, [this](Entity e) {
             removeComponent(e);
         });
     }

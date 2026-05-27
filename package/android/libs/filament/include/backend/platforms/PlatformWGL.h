@@ -38,7 +38,7 @@ protected:
     // Platform Interface
 
     Driver* createDriver(void* sharedGLContext,
-            const Platform::DriverConfig& driverConfig) override;
+            const Platform::DriverConfig& driverConfig) noexcept override;
 
     int getOSVersion() const noexcept final override { return 0; }
 
@@ -53,7 +53,7 @@ protected:
     SwapChain* createSwapChain(void* nativewindow, uint64_t flags) noexcept override;
     SwapChain* createSwapChain(uint32_t width, uint32_t height, uint64_t flags) noexcept override;
     void destroySwapChain(SwapChain* swapChain) noexcept override;
-    bool makeCurrent(ContextType type, SwapChain* drawSwapChain, SwapChain* readSwapChain) override;
+    bool makeCurrent(ContextType type, SwapChain* drawSwapChain, SwapChain* readSwapChain) noexcept override;
     void commit(SwapChain* swapChain) noexcept override;
 
 protected:
@@ -61,12 +61,8 @@ protected:
     HWND mHWnd = NULL;
     HDC mWhdc = NULL;
     PIXELFORMATDESCRIPTOR mPfd = {};
-    std::vector<int> mAttribs;
-
-    // For shared contexts
-    static constexpr int SHARED_CONTEXT_NUM = 2;
     std::vector<HGLRC> mAdditionalContexts;
-    std::atomic<int> mNextFreeSharedContextIndex{0};
+    std::vector<int> mAttribs;
 };
 
 } // namespace filament::backend

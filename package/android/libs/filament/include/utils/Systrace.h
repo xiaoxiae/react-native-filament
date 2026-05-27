@@ -14,15 +14,9 @@
  * limitations under the License.
  */
 
-/***********************************************************************
- * DEPRECATED                                                          *
- *                                                                     *
- * Systrace.h is deprecated as a public API. There is no replacement.  *
- * Applications should instead use the Perfetto SDK directly.          *
- ***********************************************************************/
-
 #ifndef TNT_UTILS_SYSTRACE_H
 #define TNT_UTILS_SYSTRACE_H
+
 
 #define SYSTRACE_TAG_NEVER          (0)
 #define SYSTRACE_TAG_ALWAYS         (1<<0)

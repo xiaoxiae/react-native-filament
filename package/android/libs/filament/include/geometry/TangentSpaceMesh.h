@@ -340,7 +340,7 @@ public:
                                     std::is_same<filament::math::ushort3, T>::value ||
                                     std::is_same<filament::math::ushort4, T>::value>::type;
     template<typename T, typename = is_supported_aux_t<T>>
-    void getAux(AuxAttribute attribute, T* out, size_t stride = 0) const;
+    void getAux(AuxAttribute attribute, T* out, size_t stride = 0) const noexcept;
 
     /**
      * Get number of output triangles.

@@ -19,7 +19,7 @@
 
 #include <filament/FilamentAPI.h>
 #include <filament/Color.h>
-#include <filament/Engine.h>
+
 #include <filament/MaterialEnums.h>
 
 #include <backend/DriverEnums.h>
@@ -56,36 +56,35 @@ class UTILS_PUBLIC MaterialInstance : public FilamentAPI {
     };
 
 public:
-    using CullingMode = backend::CullingMode;
-    // ReSharper disable once CppRedundantQualifier
+    using CullingMode = filament::backend::CullingMode;
     using TransparencyMode = filament::TransparencyMode;
-    using DepthFunc = backend::SamplerCompareFunc;
-    using StencilCompareFunc = backend::SamplerCompareFunc;
-    using StencilOperation = backend::StencilOperation;
-    using StencilFace = backend::StencilFace;
+    using DepthFunc = filament::backend::SamplerCompareFunc;
+    using StencilCompareFunc = filament::backend::SamplerCompareFunc;
+    using StencilOperation = filament::backend::StencilOperation;
+    using StencilFace = filament::backend::StencilFace;
 
     template<typename T>
-    using is_supported_parameter_t = std::enable_if_t<
-            std::is_same_v<float, T> ||
-            std::is_same_v<int32_t, T> ||
-            std::is_same_v<uint32_t, T> ||
-            std::is_same_v<math::int2, T> ||
-            std::is_same_v<math::int3, T> ||
-            std::is_same_v<math::int4, T> ||
-            std::is_same_v<math::uint2, T> ||
-            std::is_same_v<math::uint3, T> ||
-            std::is_same_v<math::uint4, T> ||
-            std::is_same_v<math::float2, T> ||
-            std::is_same_v<math::float3, T> ||
-            std::is_same_v<math::float4, T> ||
-            std::is_same_v<math::mat4f, T> ||
+    using is_supported_parameter_t = typename std::enable_if<
+            std::is_same<float, T>::value ||
+            std::is_same<int32_t, T>::value ||
+            std::is_same<uint32_t, T>::value ||
+            std::is_same<math::int2, T>::value ||
+            std::is_same<math::int3, T>::value ||
+            std::is_same<math::int4, T>::value ||
+            std::is_same<math::uint2, T>::value ||
+            std::is_same<math::uint3, T>::value ||
+            std::is_same<math::uint4, T>::value ||
+            std::is_same<math::float2, T>::value ||
+            std::is_same<math::float3, T>::value ||
+            std::is_same<math::float4, T>::value ||
+            std::is_same<math::mat4f, T>::value ||
             // these types are slower as they need a layout conversion
-            std::is_same_v<bool, T> ||
-            std::is_same_v<math::bool2, T> ||
-            std::is_same_v<math::bool3, T> ||
-            std::is_same_v<math::bool4, T> ||
-            std::is_same_v<math::mat3f, T>
-    >;
+            std::is_same<bool, T>::value ||
+            std::is_same<math::bool2, T>::value ||
+            std::is_same<math::bool3, T>::value ||
+            std::is_same<math::bool4, T>::value ||
+            std::is_same<math::mat3f, T>::value
+    >::type;
 
     /**
      * Creates a new MaterialInstance using another MaterialInstance as a template for initialization.
@@ -122,13 +121,13 @@ public:
 
     /** inline helper to provide the name as a null-terminated string literal */
     template<typename T, typename = is_supported_parameter_t<T>>
-    void setParameter(StringLiteral const name, T const& value) {
+    inline void setParameter(StringLiteral name, T const& value) {
         setParameter<T>(name.data, name.size, value);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
     template<typename T, typename = is_supported_parameter_t<T>>
-    void setParameter(const char* UTILS_NONNULL name, T const& value) {
+    inline void setParameter(const char* UTILS_NONNULL name, T const& value) {
         setParameter<T>(name, strlen(name), value);
     }
 
@@ -141,7 +140,6 @@ public:
      * @param values        Array of values to set to the named parameter array.
      * @param count         Size of the array to set.
      * @throws utils::PreConditionPanic if name doesn't exist or no-op if exceptions are disabled.
-     * @see Material::hasParameter
      */
     template<typename T, typename = is_supported_parameter_t<T>>
     void setParameter(const char* UTILS_NONNULL name, size_t nameLength,
@@ -149,14 +147,14 @@ public:
 
     /** inline helper to provide the name as a null-terminated string literal */
     template<typename T, typename = is_supported_parameter_t<T>>
-    void setParameter(StringLiteral const name, const T* UTILS_NONNULL values, size_t const count) {
+    inline void setParameter(StringLiteral name, const T* UTILS_NONNULL values, size_t count) {
         setParameter<T>(name.data, name.size, values, count);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
     template<typename T, typename = is_supported_parameter_t<T>>
-    void setParameter(const char* UTILS_NONNULL name,
-                      const T* UTILS_NONNULL values, size_t const count) {
+    inline void setParameter(const char* UTILS_NONNULL name,
+            const T* UTILS_NONNULL values, size_t count) {
         setParameter<T>(name, strlen(name), values, count);
     }
 
@@ -177,14 +175,14 @@ public:
             Texture const* UTILS_NULLABLE texture, TextureSampler const& sampler);
 
     /** inline helper to provide the name as a null-terminated string literal */
-    void setParameter(StringLiteral const name,
-                      Texture const* UTILS_NULLABLE texture, TextureSampler const& sampler) {
+    inline void setParameter(StringLiteral name,
+            Texture const* UTILS_NULLABLE texture, TextureSampler const& sampler) {
         setParameter(name.data, name.size, texture, sampler);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
-    void setParameter(const char* UTILS_NONNULL name,
-                      Texture const* UTILS_NULLABLE texture, TextureSampler const& sampler) {
+    inline void setParameter(const char* UTILS_NONNULL name,
+            Texture const* UTILS_NULLABLE texture, TextureSampler const& sampler) {
         setParameter(name, strlen(name), texture, sampler);
     }
 
@@ -203,12 +201,12 @@ public:
             RgbType type, math::float3 color);
 
     /** inline helper to provide the name as a null-terminated string literal */
-    void setParameter(StringLiteral const name, RgbType const type, math::float3 const color) {
+    inline void setParameter(StringLiteral name, RgbType type, math::float3 color) {
         setParameter(name.data, name.size, type, color);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
-    void setParameter(const char* UTILS_NONNULL name, RgbType const type, math::float3 const color) {
+    inline void setParameter(const char* UTILS_NONNULL name, RgbType type, math::float3 color) {
         setParameter(name, strlen(name), type, color);
     }
 
@@ -227,38 +225,34 @@ public:
             RgbaType type, math::float4 color);
 
     /** inline helper to provide the name as a null-terminated string literal */
-    void setParameter(StringLiteral const name, RgbaType const type, math::float4 const color) {
+    inline void setParameter(StringLiteral name, RgbaType type, math::float4 color) {
         setParameter(name.data, name.size, type, color);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
-    void setParameter(const char* UTILS_NONNULL name, RgbaType const type, math::float4 const color) {
+    inline void setParameter(const char* UTILS_NONNULL name, RgbaType type, math::float4 color) {
         setParameter(name, strlen(name), type, color);
     }
 
     /**
      * Gets the value of a parameter by name.
      * 
-     * Note: Only supports non-texture parameters such as numeric and math types.
-     * 
      * @param name          Name of the parameter as defined by Material. Cannot be nullptr.
      * @param nameLength    Length in `char` of the name parameter.
      * @throws utils::PreConditionPanic if name doesn't exist or no-op if exceptions are disabled.
-     * 
-     * @see Material::hasParameter
      */
     template<typename T>
     T getParameter(const char* UTILS_NONNULL name, size_t nameLength) const;
 
     /** inline helper to provide the name as a null-terminated C string */
     template<typename T, typename = is_supported_parameter_t<T>>
-    T getParameter(StringLiteral const name) const {
+    inline T getParameter(StringLiteral name) const {
         return getParameter<T>(name.data, name.size);
     }
 
     /** inline helper to provide the name as a null-terminated C string */
     template<typename T, typename = is_supported_parameter_t<T>>
-    T getParameter(const char* UTILS_NONNULL name) const {
+    inline T getParameter(const char* UTILS_NONNULL name) const {
         return getParameter<T>(name, strlen(name));
     }
 
@@ -378,20 +372,9 @@ public:
     void setCullingMode(CullingMode culling) noexcept;
 
     /**
-     * Overrides the default triangle culling state that was set on the material separately for the
-     * color and shadow passes
-     */
-    void setCullingMode(CullingMode colorPassCullingMode, CullingMode shadowPassCullingMode) noexcept;
-
-    /**
      * Returns the face culling mode.
      */
     CullingMode getCullingMode() const noexcept;
-
-    /**
-     * Returns the face culling mode for the shadow passes.
-     */
-    CullingMode getShadowCullingMode() const noexcept;
 
     /**
      * Overrides the default color-buffer write state that was set on the material.
@@ -529,13 +512,6 @@ public:
      */
     void setStencilWriteMask(uint8_t writeMask,
             StencilFace face = StencilFace::FRONT_AND_BACK) noexcept;
-
-    /**
-     * PostProcess and compute domain material instance must be commited manually. This call has
-     * no effect on surface domain materials.
-     * @param engine Filament engine
-     */
-    void commit(Engine& engine) const;
 
 protected:
     // prevent heap allocation

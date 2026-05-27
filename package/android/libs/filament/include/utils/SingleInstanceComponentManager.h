@@ -108,7 +108,7 @@ public:
         return getComponentCount() == 0;
     }
 
-    Entity const* getEntities() const noexcept {
+    utils::Entity const* getEntities() const noexcept {
         return data<ENTITY_INDEX>() + 1;
     }
 
@@ -238,11 +238,11 @@ protected:
         default_random_engine& rng = mRng;
         UTILS_NOUNROLL
         while (count && aliveInARow < ratio) {
-            assert(count == getComponentCount());
+            assert_invariant(count == getComponentCount());
             // note: using the modulo favorizes lower number
             size_t const i = rng() % count;
             Entity const entity = pEntities[i];
-            assert(entity);
+            assert_invariant(entity);
             if (UTILS_LIKELY(em.isAlive(entity))) {
                 ++aliveInARow;
                 continue;

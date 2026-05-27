@@ -38,7 +38,37 @@ def supportsNamespace() {
   return (major == 7 && minor >= 3) || major >= 8
 }
 
-static def findNodeModules(baseDir) {
+def findNodeModules(baseDir) {
+  // CHALKBAG FORK WIRING: this package is consumed as a `file:` path-ref dep that
+  // lives OUTSIDE the app tree (../forks/react-native-filament/package), symlinked
+  // into the app's node_modules. Gradle resolves the project to its real path, so
+  // the upward walk below never reaches app/node_modules. Honor an explicit override
+  // injected by the app (android/gradle.properties via the withWorkletsCoreFix config
+  // plugin) before falling back to the walk.
+  if (rootProject.hasProperty("reactNativeFilamentNodeModulesDir")) {
+    def raw = rootProject.property("reactNativeFilamentNodeModulesDir").toString()
+    // Java .properties files are decoded as ISO-8859-1 per spec, but the value was
+    // written as UTF-8 (the path may contain non-ASCII chars). Reverse the mojibake by
+    // re-interpreting the Latin-1 bytes as UTF-8.
+    def overridePath = new File(new String(raw.getBytes("ISO-8859-1"), "UTF-8"))
+    if (!overridePath.exists()) {
+      // Fall back to the bytes as-written in case the env is already UTF-8 clean.
+      overridePath = new File(raw)
+    }
+    if (overridePath.exists()) {
+      return overridePath.toPath().toAbsolutePath()
+    }
+  }
+  // The consuming app's node_modules is the parent of the autolinked react-native
+  // dir; the RN gradle plugin exposes it on the root project.
+  if (rootProject.hasProperty("reactNativeDir")) {
+    def rnDir = new File(rootProject.property("reactNativeDir").toString())
+    def nm = rnDir.getParentFile()
+    if (nm != null && nm.exists()) {
+      return nm.toPath().toAbsolutePath()
+    }
+  }
+
   // Check if we are building the example app:
   // Check if ../FabricExample/node_modules exists
     def exampleAppPath = Paths.get(baseDir.toString(), "..", "FabricExample")

@@ -220,7 +220,7 @@ public:
          * the renderable are immutable.
          * STATIC geometry has the same restrictions as STATIC_BOUNDS, but in addition disallows
          * skinning, morphing and changing the VertexBuffer or IndexBuffer in any way.
-         * @param type type of geometry.
+         * @param enable whether this renderable has static bounds. false by default.
          */
         Builder& geometryType(GeometryType type) noexcept;
 
@@ -297,7 +297,7 @@ public:
         Builder& priority(uint8_t priority) noexcept;
 
         /**
-         * Set the channel this renderable is associated to. There can be 8 channels.
+         * Set the channel this renderable is associated to. There can be 4 channels.
          * All renderables in a given channel are rendered together, regardless of anything else.
          * They are sorted as usual within a channel.
          * Channels work similarly to priorities, except that they enforce the strongest ordering.
@@ -305,7 +305,7 @@ public:
          * Channels 0 and 1 may not have render primitives using a material with `refractionType`
          * set to `screenspace`.
          *
-         * @param channel clamped to the range [0..7], defaults to 2.
+         * @param channel clamped to the range [0..3], defaults to 2.
          *
          * @return Builder reference for chaining calls.
          *
@@ -454,7 +454,7 @@ public:
          *
          * @param primitiveIndex zero-based index of the primitive, must be less than the primitive
          *                       count passed to Builder constructor
-         * @param indicesAndWeightsVector pairs of bone index and bone weight for all vertices of
+         * @param indicesAndWeightsVectors pairs of bone index and bone weight for all vertices of
          *                                 the primitive sequentially
          *
          * @return Builder reference for chaining calls.
@@ -464,10 +464,15 @@ public:
         Builder& boneIndicesAndWeights(size_t primitiveIndex,
                 utils::FixedCapacityVector<
                     utils::FixedCapacityVector<math::float2>> indicesAndWeightsVector) noexcept;
-
         /**
-         * Controls if the renderable has legacy vertex morphing targets, zero by default. This is
+         * Controls if the renderable has vertex morphing targets, zero by default. This is
          * required to enable GPU morphing.
+         *
+         * Filament supports two morphing modes: standard (default) and legacy.
+         *
+         * For standard morphing, A MorphTargetBuffer must be created and provided via
+         * RenderableManager::setMorphTargetBufferAt(). Standard morphing supports up to
+         * \c CONFIG_MAX_MORPH_TARGET_COUNT morph targets.
          *
          * For legacy morphing, the attached VertexBuffer must provide data in the
          * appropriate VertexAttribute slots (\c MORPH_POSITION_0 etc). Legacy morphing only
@@ -481,29 +486,26 @@ public:
         Builder& morphing(size_t targetCount) noexcept;
 
         /**
-         * Controls if the renderable has vertex morphing targets, zero by default. This is
-         * required to enable GPU morphing.
+         * Specifies the morph target buffer for a primitive.
          *
-         * Filament supports two morphing modes: standard (default) and legacy.
-         *
-         * For standard morphing, A MorphTargetBuffer must be provided.
-         * Standard morphing supports up to \c CONFIG_MAX_MORPH_TARGET_COUNT morph targets.
-         *
-         * See also RenderableManager::setMorphWeights(), which can be called on a per-frame basis
-         * to advance the animation.
-         */
-        Builder& morphing(MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer) noexcept;
-
-        /**
-         * Specifies the the range of the MorphTargetBuffer to use with this primitive.
+         * The morph target buffer must have an associated renderable and geometry. Two conditions
+         * must be met:
+         * 1. The number of morph targets in the buffer must equal the renderable's morph target
+         *    count.
+         * 2. The vertex count of each morph target must equal the geometry's vertex count.
          *
          * @param level the level of detail (lod), only 0 can be specified
          * @param primitiveIndex zero-based index of the primitive, must be less than the count passed to Builder constructor
+         * @param morphTargetBuffer specifies the morph target buffer
          * @param offset specifies where in the morph target buffer to start reading (expressed as a number of vertices)
+         * @param count number of vertices in the morph target buffer to read, must equal the geometry's count (for triangles, this should be a multiple of 3)
          */
-        Builder& morphing(uint8_t level,
-                size_t primitiveIndex, size_t offset) noexcept;
+        Builder& morphing(uint8_t level, size_t primitiveIndex,
+                MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer,
+                size_t offset, size_t count) noexcept;
 
+        inline Builder& morphing(uint8_t level, size_t primitiveIndex,
+                MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer) noexcept;
 
         /**
          * Sets the drawing order for blended primitives. The drawing order is either global or
@@ -597,6 +599,21 @@ public:
         friend class FEngine;
         friend class FRenderPrimitive;
         friend class FRenderableManager;
+        struct Entry {
+            VertexBuffer* UTILS_NULLABLE vertices = nullptr;
+            IndexBuffer* UTILS_NULLABLE indices = nullptr;
+            size_t offset = 0;
+            size_t count = 0;
+            MaterialInstance const* UTILS_NULLABLE materialInstance = nullptr;
+            PrimitiveType type = PrimitiveType::TRIANGLES;
+            uint16_t blendOrder = 0;
+            bool globalBlendOrderEnabled = false;
+            struct {
+                MorphTargetBuffer* UTILS_NULLABLE buffer = nullptr;
+                size_t offset = 0;
+                size_t count = 0;
+            } morphing;
+        };
     };
 
     /**
@@ -748,13 +765,20 @@ public:
     /**
      * Associates a MorphTargetBuffer to the given primitive.
      */
-    void setMorphTargetBufferOffsetAt(Instance instance, uint8_t level, size_t primitiveIndex,
-            size_t offset);
+    void setMorphTargetBufferAt(Instance instance, uint8_t level, size_t primitiveIndex,
+            MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer, size_t offset, size_t count);
 
     /**
-     * Get a MorphTargetBuffer to the given renderable or null if it doesn't exist.
+     * Utility method to change a MorphTargetBuffer to the given primitive
      */
-    MorphTargetBuffer* UTILS_NULLABLE getMorphTargetBuffer(Instance instance) const noexcept;
+    inline void setMorphTargetBufferAt(Instance instance, uint8_t level, size_t primitiveIndex,
+            MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer);
+
+    /**
+     * Get a MorphTargetBuffer to the given primitive or null if it doesn't exist.
+     */
+    MorphTargetBuffer* UTILS_NULLABLE getMorphTargetBufferAt(Instance instance,
+            uint8_t level, size_t primitiveIndex) const noexcept;
 
     /**
      * Gets the number of morphing in the given entity.
@@ -784,13 +808,6 @@ public:
     size_t getPrimitiveCount(Instance instance) const noexcept;
 
     /**
-     * Returns the number of instances for this renderable.
-     * @param instance Instance of the component obtained from getInstance().
-     * @return The number of instances.
-     */
-    size_t getInstanceCount(Instance instance) const noexcept;
-
-    /**
      * Changes the material instance binding for the given primitive.
      *
      * The MaterialInstance's material must have a feature level equal or lower to the engine's
@@ -804,13 +821,6 @@ public:
      */
     void setMaterialInstanceAt(Instance instance,
             size_t primitiveIndex, MaterialInstance const* UTILS_NONNULL materialInstance);
-
-    /**
-     * Clear the MaterialInstance for the given primitive.
-     * @param instance Renderable's instance
-     * @param primitiveIndex Primitive index
-     */
-    void clearMaterialInstanceAt(Instance instance, size_t primitiveIndex);
 
     /**
      * Retrieves the material instance that is bound to the given primitive.
@@ -859,20 +869,20 @@ public:
     /*! \cond PRIVATE */
     template<typename T>
     struct is_supported_vector_type {
-        using type = std::enable_if_t<
-                std::is_same_v<math::float4, T> ||
-                std::is_same_v<math::half4,  T> ||
-                std::is_same_v<math::float3, T> ||
-                std::is_same_v<math::half3,  T>
-        >;
+        using type = typename std::enable_if<
+                std::is_same<math::float4, T>::value ||
+                std::is_same<math::half4,  T>::value ||
+                std::is_same<math::float3, T>::value ||
+                std::is_same<math::half3,  T>::value
+        >::type;
     };
 
     template<typename T>
     struct is_supported_index_type {
-        using type = std::enable_if_t<
-                std::is_same_v<uint16_t, T> ||
-                std::is_same_v<uint32_t, T>
-        >;
+        using type = typename std::enable_if<
+                std::is_same<uint16_t, T>::value ||
+                std::is_same<uint32_t, T>::value
+        >::type;
     };
     /*! \endcond */
 
@@ -895,6 +905,20 @@ protected:
     // prevent heap allocation
     ~RenderableManager() = default;
 };
+
+RenderableManager::Builder& RenderableManager::Builder::morphing(
+        uint8_t level, size_t primitiveIndex,
+        MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer) noexcept {
+    return morphing(level, primitiveIndex, morphTargetBuffer, 0,
+            morphTargetBuffer->getVertexCount());
+}
+
+void RenderableManager::setMorphTargetBufferAt(
+        Instance instance, uint8_t level, size_t primitiveIndex,
+        MorphTargetBuffer* UTILS_NONNULL morphTargetBuffer) {
+    setMorphTargetBufferAt(instance, level, primitiveIndex, morphTargetBuffer, 0,
+            morphTargetBuffer->getVertexCount());
+}
 
 template<typename VECTOR, typename INDEX, typename, typename>
 Box RenderableManager::computeAABB(

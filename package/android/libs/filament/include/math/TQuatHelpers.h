@@ -259,11 +259,10 @@ public:
             return normalize(lerp(d < 0 ? -p : p, q, t));
         }
         const T npq = std::sqrt(dot(p, p) * dot(q, q));  // ||p|| * ||q||
-        const T cos_a = math::clamp(absd / npq, T(-1), T(1));
-        const T a = std::acos(cos_a);
+        const T a = std::acos(filament::math::clamp(absd / npq, T(-1), T(1)));
         const T a0 = a * (1 - t);
         const T a1 = a * t;
-        const T sina = std::sqrt(T(1) - cos_a * cos_a);
+        const T sina = sin(a);
         if (sina < value_eps) {
             return normalize(lerp(p, q, t));
         }

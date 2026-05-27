@@ -6,6 +6,7 @@
   "module": "lib/module/index",
   "types": "lib/typescript/index.d.ts",
   "react-native": "src/index",
+  "browser": "src/index",
   "source": "src/index",
   "test": "src/test/RunTests",
   "files": [
@@ -33,7 +34,7 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "rm -rf android/build example/android/build example/android/app/build example/ios/build lib",
     "build": "bob build",
-    "prepare": "git submodule update --init --recursive && bun patch-filament && bob build",
+    "prepare": "echo 'chalkbag dev: fork consumed as source (web) / prebuilt libs (native) — prepare skipped'",
     "update-submodule": "git submodule update --remote --merge",
     "patch-filament": "cd ../filament ; git apply ../package/filament_animator_feat.patch ; git apply ../package/filament_ios_simulator.patch ; git apply ../package/filament_depth_clip_mode.patch ; cd ../package",
     "build-filament": "bun patch-filament && scripts/build-filament.sh",

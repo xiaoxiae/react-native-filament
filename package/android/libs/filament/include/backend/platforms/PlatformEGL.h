@@ -25,7 +25,6 @@
 #include <EGL/eglext.h>
 #include <EGL/eglplatform.h>
 
-#include <utils/compiler.h>
 #include <utils/Invocable.h>
 
 #include <initializer_list>
@@ -47,11 +46,6 @@ public:
 
     // Return true if we're on an OpenGL platform (as opposed to OpenGL ES). false by default.
     virtual bool isOpenGL() const noexcept;
-
-    /**
-     * Creates an ExternalImage from a EGLImageKHR
-     */
-    ExternalImageHandle UTILS_PUBLIC createExternalImage(EGLImageKHR eglImage) noexcept;
 
 protected:
     // --------------------------------------------------------------------------------------------
@@ -81,7 +75,8 @@ protected:
      * Initializes EGL, creates the OpenGL context and returns a concrete Driver implementation
      * that supports OpenGL/OpenGL ES.
      */
-    Driver* createDriver(void* sharedContext, const DriverConfig& driverConfig) override;
+    Driver* createDriver(void* sharedContext,
+            const Platform::DriverConfig& driverConfig) noexcept override;
 
     /**
      * This returns zero. This method can be overridden to return something more useful.
@@ -99,19 +94,22 @@ protected:
     void terminate() noexcept override;
 
     bool isProtectedContextSupported() const noexcept override;
+
     bool isSRGBSwapChainSupported() const noexcept override;
-    bool isMSAASwapChainSupported(uint32_t samples) const noexcept override;
+    SwapChain* createSwapChain(void* nativewindow, uint64_t flags) noexcept override;
+    SwapChain* createSwapChain(uint32_t width, uint32_t height, uint64_t flags) noexcept override;
+    void destroySwapChain(SwapChain* swapChain) noexcept override;
     bool isSwapChainProtected(SwapChain* swapChain) noexcept override;
 
     ContextType getCurrentContextType() const noexcept override;
 
     bool makeCurrent(ContextType type,
             SwapChain* drawSwapChain,
-            SwapChain* readSwapChain) override;
+            SwapChain* readSwapChain) noexcept override;
 
     void makeCurrent(SwapChain* drawSwapChain, SwapChain* readSwapChain,
             utils::Invocable<void()> preContextChange,
-            utils::Invocable<void(size_t index)> postContextChange) override;
+            utils::Invocable<void(size_t index)> postContextChange) noexcept override;
 
     void commit(SwapChain* swapChain) noexcept override;
 
@@ -120,13 +118,12 @@ protected:
     void destroyFence(Fence* fence) noexcept override;
     FenceStatus waitFence(Fence* fence, uint64_t timeout) noexcept override;
 
-    ExternalTexture* createExternalImageTexture() noexcept override;
-    void destroyExternalImageTexture(ExternalTexture* texture) noexcept override;
+    OpenGLPlatform::ExternalTexture* createExternalImageTexture() noexcept override;
+    void destroyExternalImage(ExternalTexture* texture) noexcept override;
     bool setExternalImage(void* externalImage, ExternalTexture* texture) noexcept override;
-    bool setExternalImage(ExternalImageHandleRef externalImage, ExternalTexture* texture) noexcept override;
 
     /**
-     * Logs glGetError() to LOG(ERROR)
+     * Logs glGetError() to slog.e
      * @param name a string giving some context on the error. Typically __func__.
      */
     static void logEglError(const char* name) noexcept;
@@ -146,18 +143,25 @@ protected:
     EGLContext getContextForType(ContextType type) const noexcept;
 
     // makes the draw and read surface current without changing the current context
-    EGLBoolean makeCurrent(EGLSurface drawSurface, EGLSurface readSurface) {
+    EGLBoolean makeCurrent(EGLSurface drawSurface, EGLSurface readSurface) noexcept {
         return egl.makeCurrent(drawSurface, readSurface);
     }
 
     // makes context current and set draw and read surfaces to EGL_NO_SURFACE
-    EGLBoolean makeCurrent(EGLContext context) {
+    EGLBoolean makeCurrent(EGLContext context) noexcept {
         return egl.makeCurrent(context, mEGLDummySurface, mEGLDummySurface);
     }
 
-    EGLDisplay getEglDisplay() const noexcept { return mEGLDisplay; }
-    EGLConfig getEglConfig() const noexcept { return mEGLConfig; }
-    EGLConfig getSuitableConfigForSwapChain(uint64_t flags, bool window, bool pbuffer) const;
+    // TODO: this should probably use getters instead.
+    EGLDisplay mEGLDisplay = EGL_NO_DISPLAY;
+    EGLContext mEGLContext = EGL_NO_CONTEXT;
+    EGLContext mEGLContextProtected = EGL_NO_CONTEXT;
+    EGLSurface mEGLDummySurface = EGL_NO_SURFACE;
+    ContextType mCurrentContextType = ContextType::NONE;
+    // mEGLConfig is valid only if ext.egl.KHR_no_config_context is false
+    EGLConfig mEGLConfig = EGL_NO_CONFIG_KHR;
+    Config mContextAttribs;
+    std::vector<EGLContext> mAdditionalContexts;
 
     // supported extensions detected at runtime
     struct {
@@ -174,11 +178,7 @@ protected:
         } egl;
     } ext;
 
-    struct SwapChainEGL : public SwapChain {
-        SwapChainEGL(PlatformEGL const& platform, void* nativeWindow, uint64_t flags);
-        SwapChainEGL(PlatformEGL const& platform, uint32_t width, uint32_t height, uint64_t flags);
-        void terminate(PlatformEGL& platform);
-
+    struct SwapChainEGL : public Platform::SwapChain {
         EGLSurface sur = EGL_NO_SURFACE;
         Config attribs{};
         EGLNativeWindowType nativeWindow{};
@@ -188,31 +188,10 @@ protected:
 
     void initializeGlExtensions() noexcept;
 
-    struct ExternalImageEGL : public ExternalImage {
-        EGLImageKHR eglImage = EGL_NO_IMAGE;
-    protected:
-        ~ExternalImageEGL() override;
-    };
-
-private:
-    // prevent derived classes' implementations to call through
-    [[nodiscard]] SwapChain* createSwapChain(void* nativeWindow, uint64_t flags) override;
-    [[nodiscard]] SwapChain* createSwapChain(uint32_t width, uint32_t height, uint64_t flags) override;
-    void destroySwapChain(SwapChain* swapChain) noexcept override;
-
+protected:
     EGLConfig findSwapChainConfig(uint64_t flags, bool window, bool pbuffer) const;
 
-    EGLDisplay mEGLDisplay = EGL_NO_DISPLAY;
-    EGLContext mEGLContext = EGL_NO_CONTEXT;
-    EGLContext mEGLContextProtected = EGL_NO_CONTEXT;
-    EGLSurface mEGLDummySurface = EGL_NO_SURFACE;
-    ContextType mCurrentContextType = ContextType::NONE;
-    // mEGLConfig is valid only if ext.egl.KHR_no_config_context is false
-    EGLConfig mEGLConfig = EGL_NO_CONFIG_KHR;
-    Config mContextAttribs;
-    std::vector<EGLContext> mAdditionalContexts;
-    bool mMSAA4XSupport = false;
-
+private:
     class EGL {
         EGLDisplay& mEGLDisplay;
         EGLSurface mCurrentDrawSurface = EGL_NO_SURFACE;
@@ -221,14 +200,12 @@ private:
     public:
         explicit EGL(EGLDisplay& dpy) : mEGLDisplay(dpy) {}
         EGLBoolean makeCurrent(EGLContext context,
-                EGLSurface drawSurface, EGLSurface readSurface);
+                EGLSurface drawSurface, EGLSurface readSurface) noexcept;
 
-        EGLBoolean makeCurrent(EGLSurface drawSurface, EGLSurface readSurface) {
+        EGLBoolean makeCurrent(EGLSurface drawSurface, EGLSurface readSurface) noexcept {
             return makeCurrent(mCurrentContext, drawSurface, readSurface);
         }
     } egl{ mEGLDisplay };
-
-    bool checkIfMSAASwapChainSupported(uint32_t samples) const noexcept;
 };
 
 } // namespace filament::backend

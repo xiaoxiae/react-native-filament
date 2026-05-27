@@ -1,5 +1,5 @@
 import React from 'react'
-import {
+import type {
   RNFCamera,
   Choreographer,
   Engine,
@@ -11,7 +11,7 @@ import {
   TransformManager,
   View,
 } from '../types'
-import { IWorkletContext } from 'react-native-worklets-core'
+import type { IWorkletContext } from 'react-native-worklets-core'
 
 export type FilamentContextType = {
   engine: Engine
