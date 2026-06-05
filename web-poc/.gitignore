@@ -1,0 +1,4 @@
+# Google Filament WASM bundle (npm `filament` — the same files served from the app's
+# public/filament/). Regenerable: copy from node_modules/filament/, don't track here.
+filament.js
+filament.wasm

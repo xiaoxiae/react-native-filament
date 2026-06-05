@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Stamp PoC — direct image→texture→quad (no GLB)</title>
+    <style>
+        html, body { height: 100%; margin: 0; background: #111; }
+        #container { position: relative; height: 100%; }
+        canvas { position: absolute; width: 100%; height: 100%; }
+        #log {
+            position: absolute; top: 0; left: 0; margin: 0; padding: 8px;
+            font: 12px/1.35 monospace; color: #b6f7c1; white-space: pre-wrap;
+            pointer-events: none; text-shadow: 0 0 2px #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas></canvas>
+        <pre id="log"></pre>
+    </div>
+    <script src="filament.js"></script>
+    <script>
+        const logEl = document.getElementById('log');
+        const log = (m) => { logEl.textContent += m + '\n'; console.log('[poc]', m); };
+        const fail = (m, e) => { logEl.textContent += 'ERROR: ' + m + ': ' + (e && e.message || e) + '\n'; console.error('[poc]', m, e); };
+        // Surfaced to Playwright/console for assertion.
+        window.POC = { stage: 'init', ok: false, error: null };
+
+        const PNG_URL = 'stamp.png';
+        const MAT_URL = 'unlit_textured.filamat';
+
+        Filament.init([PNG_URL, MAT_URL], () => {
+            try { run(); }
+            catch (e) { window.POC.error = String(e && e.stack || e); fail('run() threw', e); }
+        });
+
+        // Column-major 4x4. Rotate about Y then X so the quad is visibly a 3D-placed plane.
+        function rotYX(ry, rx) {
+            const cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx);
+            // Ry * Rx  (column-major)
+            return [
+                cy,       0,    -sy,      0,
+                sy * sx,  cx,    cy * sx, 0,
+                sy * cx, -sx,    cy * cx, 0,
+                0,        0,     0,       1,
+            ];
+        }
+
+        function probe() {
+            const F = Filament;
+            const keys = Object.keys(F);
+            const grp = (re) => keys.filter((k) => re.test(k)).join(', ');
+            log('Filament keys: ' + keys.length);
+            log('  texture helpers: ' + ['createTextureFromPng','createTextureFromJpeg','createTextureFromKtx1']
+                .map((m) => m + '=' + (typeof F.Engine?.prototype?.[m])).join('  '));
+            log('  VertexAttribute? ' + (!!F.VertexAttribute) + '  VertexBuffer$AttributeType? ' + (!!F.VertexBuffer$AttributeType));
+            log('  RenderableManager$Builder? ' + (typeof F.RenderableManager$Builder) + '  $PrimitiveType? ' + (!!F.RenderableManager$PrimitiveType));
+            log('  IndexBuffer$Builder? ' + (typeof F.IndexBuffer$Builder) + '  $IndexType? ' + (!!F.IndexBuffer$IndexType));
+            log('  TextureSampler? ' + (typeof F.TextureSampler) + '  MinFilter? ' + (!!F.MinFilter) + '  WrapMode? ' + (!!F.WrapMode));
+            log('  enum-ish: ' + grp(/Attribute|Filter|Wrap|PrimitiveType|IndexType|Sampler/));
+        }
+
+        function run() {
+            const F = Filament;
+            probe();
+
+            const canvas = document.querySelector('canvas');
+            const engine = window.engine = F.Engine.create(canvas);
+            const scene = engine.createScene();
+            const camEntity = F.EntityManager.get().create();
+            const camera = engine.createCamera(camEntity);
+            const swapChain = engine.createSwapChain();
+            const renderer = engine.createRenderer();
+            const view = engine.createView();
+            view.setCamera(camera);
+            view.setScene(scene);
+            window.POC.stage = 'engine';
+            log('engine + view created');
+
+            // Dark-blue skybox so transparent areas of the stamp are visibly distinct.
+            try {
+                const sky = F.Skybox.Builder().color([0.04, 0.05, 0.10, 1.0]).build(engine);
+                scene.setSkybox(sky);
+                log('skybox set');
+            } catch (e) { fail('skybox', e); }
+
+            // ---- THE POINT OF THE POC: image URL -> Filament Texture, no GLB ----
+            window.POC.stage = 'texture';
+            let texture;
+            try {
+                texture = engine.createTextureFromPng(PNG_URL, { srgb: true });
+                log('createTextureFromPng -> OK (' + texture + ')');
+            } catch (e) {
+                // fallback: some builds want raw bytes, not the preloaded-URL form.
+                try {
+                    texture = engine.createTextureFromPng(Filament.assets[PNG_URL]);
+                    log('createTextureFromPng(bytes) -> OK');
+                } catch (e2) { fail('createTextureFromPng', e2); throw e2; }
+            }
+
+            // ---- material instance + bind the texture ----
+            window.POC.stage = 'material';
+            const material = engine.createMaterial(MAT_URL);
+            const matinst = material.createInstance();
+            const sampler = new F.TextureSampler(
+                F.MinFilter.LINEAR_MIPMAP_LINEAR, F.MagFilter.LINEAR, F.WrapMode.CLAMP_TO_EDGE);
+            matinst.setTextureParameter('baseColorMap', texture, sampler);
+            log('material instance + baseColorMap bound');
+
+            // ---- quad geometry (interleaved pos float3 + uv float2, stride 20) ----
+            window.POC.stage = 'geometry';
+            const AT = F.VertexBuffer$AttributeType;
+            const VA = F.VertexAttribute;
+            const vb = F.VertexBuffer.Builder()
+                .vertexCount(4)
+                .bufferCount(1)
+                .attribute(VA.POSITION, 0, AT.FLOAT3, 0, 20)
+                .attribute(VA.UV0, 0, AT.FLOAT2, 12, 20)
+                .build(engine);
+            // Interleaved pos(x,y,z) + uv(u,v). U is mirrored (1-u) because the camera
+            // views the quad's back face; V uses image-top=0 (PNG origin) directly.
+            const verts = new Float32Array([
+                -1, -1, 0, 0, 0,
+                 1, -1, 0, 1, 0,
+                 1,  1, 0, 1, 1,
+                -1,  1, 0, 0, 1,
+            ]);
+            vb.setBufferAt(engine, 0, verts);
+            const ib = F.IndexBuffer.Builder()
+                .indexCount(6)
+                .bufferType(F.IndexBuffer$IndexType.USHORT)
+                .build(engine);
+            ib.setBuffer(engine, new Uint16Array([0, 1, 2, 0, 2, 3]));
+            log('vertex + index buffers built');
+
+            // ---- renderable ----
+            window.POC.stage = 'renderable';
+            const renderable = F.EntityManager.get().create();
+            F.RenderableManager.Builder(1)
+                .boundingBox({ center: [0, 0, 0], halfExtent: [1, 1, 1] })
+                .material(0, matinst)
+                .geometry(0, F.RenderableManager$PrimitiveType.TRIANGLES, vb, ib)
+                .culling(false)
+                .receiveShadows(false)
+                .castShadows(false)
+                .build(engine, renderable);
+            scene.addEntity(renderable);
+            log('renderable built + added to scene');
+
+            // ---- rigid transform (prove it's a world-placed quad, not a fullscreen blit) ----
+            window.POC.stage = 'transform';
+            const tcm = engine.getTransformManager();
+            const tinst = tcm.getInstance(renderable);
+            tcm.setTransform(tinst, rotYX(0.5, -0.25));
+            tinst.delete();
+            log('transform applied');
+
+            function resize() {
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.width = canvas.clientWidth * dpr;
+                const h = canvas.height = canvas.clientHeight * dpr;
+                view.setViewport([0, 0, w, h]);
+                const aspect = w / h;
+                const Fov = F.Camera$Fov;
+                camera.setProjectionFov(45, aspect, 0.1, 100.0, aspect < 1 ? Fov.HORIZONTAL : Fov.VERTICAL);
+                camera.lookAt([0, 0, 4], [0, 0, 0], [0, 1, 0]);
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            window.POC.stage = 'render';
+            window.POC.ok = true;
+            log('OK — entering render loop');
+
+            function render() {
+                if (renderer.beginFrame(swapChain)) {
+                    renderer.renderView(view);
+                    renderer.endFrame();
+                }
+                engine.execute();
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+        }
+    </script>
+</body>
+</html>

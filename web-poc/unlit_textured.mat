@@ -1,0 +1,28 @@
+material {
+    name : unlitTexturedQuad,
+    shadingModel : unlit,
+    blending : transparent,
+    doubleSided : true,
+    culling : none,
+    depthCulling : true,
+    depthWrite : false,
+    parameters : [
+        {
+            type : sampler2d,
+            name : baseColorMap
+        }
+    ],
+    requires : [
+        uv0
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 color = texture(materialParams_baseColorMap, getUV0());
+        // straight (non-premultiplied) alpha in the source PNG; Filament's
+        // transparent blending expects premultiplied, so premultiply here.
+        material.baseColor = vec4(color.rgb * color.a, color.a);
+    }
+}

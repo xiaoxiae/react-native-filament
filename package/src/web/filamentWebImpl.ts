@@ -123,6 +123,28 @@ class WebFilamentAsset {
     }
 }
 
+/**
+ * FilamentAsset-shaped handle around a single synthesized renderable (the image quad from
+ * `WebEngine.createImageQuad`). Mirrors the subset of `WebFilamentAsset` the renderer's overlay
+ * path consumes — `getRenderableEntities` / `getRoot` / `getBoundingBox` / `release` — so an
+ * image quad is interchangeable with a `loadAsset` result at the call sites.
+ */
+class WebImageQuadAsset {
+    constructor(private readonly _entity: RNFEntity) {}
+    isValid = true;
+    release() {}
+    getRenderableEntities(): RNFEntity[] {
+        return [this._entity];
+    }
+    getRoot(): RNFEntity {
+        return this._entity;
+    }
+    getBoundingBox(): any {
+        return null;
+    }
+    releaseSourceData() {}
+}
+
 class WebScene {
     constructor(
         private reg: EntityRegistry,
@@ -293,6 +315,10 @@ class WebMaterialInstance {
     }
     setMat3fParameter(n: string, v: number[]) {
         this.fInstance.setMat3Parameter?.(n, v);
+    }
+    /** Bind a sampler2d parameter to a Filament Texture + TextureSampler (image decals). */
+    setTextureParameter(n: string, texture: any, sampler: any) {
+        this.fInstance.setTextureParameter(n, texture, sampler);
     }
     setIntParameter(n: string, v: number) {
         this.fInstance.setParameterInt?.(n, v);
@@ -513,6 +539,8 @@ export class WebEngine {
     private _camera: WebCamera;
     private _view: WebView;
     private _skybox: any = null;
+    /** Cached unlit textured-quad material (one per engine, reused across image quads). */
+    private _quadMaterial: any = null;
     readonly nameComponentManager = new WebNameComponentManager();
     isValid = true;
 
@@ -614,6 +642,79 @@ export class WebEngine {
     createMaterial(buffer: { bytes: Uint8Array }) {
         return this.fEngine.createMaterial(buffer.bytes);
     }
+    /**
+     * First-class "image → textured quad" path (no GLB round-trip). Decodes `imageBuffer`
+     * (PNG/JPEG bytes) into a Filament Texture via filament.js's `createTextureFrom{Png,Jpeg}`,
+     * binds it as `baseColorMap` on an instance of the unlit textured-quad material
+     * (`materialBuffer` = the compiled `.filamat`, cached per engine), builds a unit-mapped quad
+     * spanning [-halfWidth,halfWidth] × [-halfHeight,halfHeight] in its local XY plane (normal
+     * +Z), and returns a `FilamentAsset`-shaped handle so callers treat it exactly like a
+     * `loadAsset` result (transform, scene add/remove, release). Native composes the same shape
+     * from `createMaterial` + `Material.setDefaultTextureParameter` + `RenderableManager.createPlane`.
+     */
+    createImageQuad(
+        imageBuffer: { bytes: Uint8Array } | Uint8Array,
+        materialBuffer: { bytes: Uint8Array } | Uint8Array,
+        halfWidth: number,
+        halfHeight: number,
+        mime: string,
+    ): WebImageQuadAsset {
+        const F = this.F as any;
+        const fe = this.fEngine;
+        const imgBytes = (imageBuffer as any).bytes ?? imageBuffer;
+        const matBytes = (materialBuffer as any).bytes ?? materialBuffer;
+
+        const texture =
+            mime === 'image/jpeg'
+                ? fe.createTextureFromJpeg(imgBytes, { srgb: true })
+                : fe.createTextureFromPng(imgBytes, { srgb: true });
+
+        if (!this._quadMaterial) this._quadMaterial = fe.createMaterial(matBytes);
+        const mi = this._quadMaterial.createInstance();
+        const sampler = new F.TextureSampler(
+            F.MinFilter.LINEAR_MIPMAP_LINEAR,
+            F.MagFilter.LINEAR,
+            F.WrapMode.CLAMP_TO_EDGE,
+        );
+        mi.setTextureParameter('baseColorMap', texture, sampler);
+
+        const VA = F.VertexAttribute;
+        const AT = F.VertexBuffer$AttributeType;
+        const vb = F.VertexBuffer.Builder()
+            .vertexCount(4)
+            .bufferCount(1)
+            .attribute(VA.POSITION, 0, AT.FLOAT3, 0, 20)
+            .attribute(VA.UV0, 0, AT.FLOAT2, 12, 20)
+            .build(fe);
+        // Standard GL bottom-left UV origin; interleaved pos(3) + uv(2), stride 20 bytes.
+        const verts = new Float32Array([
+            -halfWidth, -halfHeight, 0, 0, 0,
+            halfWidth, -halfHeight, 0, 1, 0,
+            halfWidth, halfHeight, 0, 1, 1,
+            -halfWidth, halfHeight, 0, 0, 1,
+        ]);
+        vb.setBufferAt(fe, 0, verts);
+        const ib = F.IndexBuffer.Builder()
+            .indexCount(6)
+            .bufferType(F.IndexBuffer$IndexType.USHORT)
+            .build(fe);
+        ib.setBuffer(fe, new Uint16Array([0, 1, 2, 0, 2, 3]));
+
+        const entity = F.EntityManager.get().create();
+        F.RenderableManager.Builder(1)
+            .boundingBox({
+                center: [0, 0, 0],
+                halfExtent: [halfWidth || 1, halfHeight || 1, 0.001],
+            })
+            .material(0, mi)
+            .geometry(0, F.RenderableManager$PrimitiveType.TRIANGLES, vb, ib)
+            .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
+            .build(fe, entity);
+
+        return new WebImageQuadAsset(this.reg.wrap(entity));
+    }
     setAutomaticInstancingEnabled() {}
     flushAndWait() {
         this.fEngine.execute?.();
@@ -647,8 +748,36 @@ export class WebEngine {
         this._scene.fScene.setSkybox(skybox);
         this._skybox = skybox;
     }
-    createAndSetSkyboxByTexture() {
-        notOnWeb('Engine.createAndSetSkyboxByTexture');
+    /**
+     * Skybox-by-texture (gradient cubemap for FilamentWallRenderer's sky background). Builds a
+     * cubemap Texture from the KTX1 buffer via the WASM `createTextureFromKtx1` helper, then a
+     * `Skybox.Builder().environment(tex)` — the web mirror of the native Ktx1 skybox path
+     * (RNFEngineImpl.Skybox.cpp). `buffer.bytes` is the KTX1 file. Degrades to a no-op (keeps any
+     * existing skybox) if the Skybox embind surface or createTextureFromKtx1 is absent.
+     */
+    createAndSetSkyboxByTexture(
+        buffer: { bytes: Uint8Array },
+        showSun?: boolean,
+        envIntensity?: number
+    ) {
+        const F: any = (window as any).Filament;
+        const Skybox = F.Skybox;
+        if (
+            !Skybox ||
+            typeof Skybox.Builder !== 'function' ||
+            typeof this.fEngine.createTextureFromKtx1 !== 'function'
+        ) {
+            // Older filament.js WASM without the cubemap/skybox embind surface — leave the
+            // renderer's current skybox (the flat-color fallback) in place rather than throwing.
+            return;
+        }
+        const cubemap = this.fEngine.createTextureFromKtx1(buffer.bytes);
+        let builder = Skybox.Builder().environment(cubemap);
+        if (typeof showSun === 'boolean' && builder.showSun) builder = builder.showSun(showSun);
+        if (envIntensity != null && builder.intensity) builder = builder.intensity(envIntensity);
+        const skybox = builder.build(this.fEngine);
+        this._scene.fScene.setSkybox(skybox);
+        this._skybox = skybox;
     }
     clearSkybox() {
         this._scene.fScene.setSkybox?.(null);
