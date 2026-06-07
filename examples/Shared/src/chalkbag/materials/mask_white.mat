@@ -1,0 +1,14 @@
+// Solid-white unlit mask (#309 post-process outline). Highlighted holds are drawn with this
+// into an offscreen render target → white silhouette on black. Screen-space, so it sidesteps
+// the holds' transparency AND open-shell topology entirely. culling:none for double-sided holds.
+material {
+    name : maskWhite,
+    shadingModel : unlit,
+    culling : none
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0);
+    }
+}

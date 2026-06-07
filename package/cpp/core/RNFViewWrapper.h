@@ -2,9 +2,11 @@
 
 #include "RNFAmbientOcclusionOptionsWrapper.h"
 #include "RNFAntiAliasingEnum.h"
+#include "RNFBlendModeEnum.h"
 #include "RNFBloomOptionsWrapper.h"
 #include "RNFCameraWrapper.h"
 #include "RNFDitheringEnum.h"
+#include "RNFRenderTargetWrapper.h"
 #include "RNFDynamicResolutionOptions.h"
 #include "RNFQualityLevel.h"
 #include "RNFSceneWrapper.h"
@@ -51,6 +53,12 @@ private:
   std::shared_ptr<BloomOptionsWrapper> createBloomOptions();
   void setBloomOptions(std::shared_ptr<BloomOptionsWrapper> options);
   std::shared_ptr<BloomOptionsWrapper> getBloomOptions();
+  // Chalkbag (#309 outline): wire a created View into its own scene/camera/target for the multi-pass.
+  void setScene(std::shared_ptr<SceneWrapper> scene);
+  void setCamera(std::shared_ptr<CameraWrapper> camera);
+  void setViewport(double left, double bottom, double width, double height);
+  void setRenderTarget(std::optional<std::shared_ptr<RenderTargetWrapper>> renderTarget);
+  void setBlendMode(const std::string& blendMode);
 
 private:
   std::mutex _mutex;

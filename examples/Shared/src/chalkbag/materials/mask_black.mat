@@ -1,0 +1,15 @@
+// Opaque BLACK occluder for the #309 mask. The wall is drawn black (not depth-only) so a hold
+// BEHIND it is painted over → covered in the mask → no outline, regardless of draw order. A
+// depth-only occluder can't erase a white hold already in the colour buffer (order-dependent).
+// culling:none so single-sided photogrammetry walls cover from any side.
+material {
+    name : maskBlack,
+    shadingModel : unlit,
+    culling : none
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+    }
+}

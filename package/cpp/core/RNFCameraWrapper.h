@@ -14,6 +14,11 @@ public:
 
   void loadHybridMethods() override;
 
+  // Internal API (not exposed to JS) — raw camera for native consumers (e.g. ViewWrapper.setCamera).
+  std::shared_ptr<Camera> getCamera() {
+    return pointee();
+  }
+
 private:
   void lookAt(std::vector<double> eye, std::vector<double> center, std::vector<double> up);
   void setLensProjection(double fov, double aspect, double near, double far);

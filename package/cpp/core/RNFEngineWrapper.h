@@ -76,6 +76,10 @@ private: // Exposed public JS API
   std::shared_ptr<LightManagerWrapper> createLightManager();
   std::shared_ptr<RendererWrapper> createRenderer();
   std::shared_ptr<RenderableManagerWrapper> createRenderableManager();
+  // Chalkbag (#309 outline): extra scenes/views + offscreen render target for the multi-pass outline.
+  std::shared_ptr<SceneWrapper> createScene();
+  std::shared_ptr<ViewWrapper> createView();
+  std::shared_ptr<RenderTargetWrapper> createRenderTarget(double width, double height);
   std::shared_ptr<NameComponentManagerWrapper> createNameComponentManager();
   std::shared_ptr<MaterialWrapper> createMaterial(std::shared_ptr<FilamentBuffer> materialBuffer);
   void createAndSetSkyboxByColor(std::string hexColor, std::optional<bool> showSun, std::optional<float> envIntensity);

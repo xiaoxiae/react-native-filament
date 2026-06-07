@@ -1,0 +1,53 @@
+// Fullscreen edge-detect composite (#309) — NATIVE variant. Samples the offscreen mask; a pixel
+// OUTSIDE the silhouette (center≈0) but within `thickness` px of an INSIDE pixel (neighbor≈1) is an
+// outline pixel → premultiplied colour. Constant screen-space width, topology-independent.
+//
+// vertexDomain:device → the fullscreen triangle is authored in clip space. We derive the sample UV
+// from the clip-space position in the vertex shader (a custom `screenUv` varying) instead of reading
+// a uv0 attribute — the fork's createImageBackgroundShape() builds a POSITION-only vertex buffer, so
+// requiring uv0 would make Filament SKIP the primitive ("missing required attributes").
+//
+// `params` packs (texelX, texelY, thickness, _) so it sets via setFloat4Parameter (no setFloat2).
+// V-flip note: on GL the RT texture origin is opposite the quad (manual 1.0 - y, matches the web MVP).
+// For the iOS/Metal port switch to the built-in uvToRenderTargetUV() which flips per-backend.
+material {
+    name : outlinePost,
+    shadingModel : unlit,
+    blending : transparent,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    vertexDomain : device,
+    variables : [ screenUv ],
+    parameters : [
+        { type : sampler2d, name : maskTex },
+        { type : float3, name : color },
+        { type : float4, name : params }
+    ]
+}
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // device domain: getPosition() is already in clip space [-1, 1] → map to [0, 1] UV.
+        material.screenUv.xy = getPosition().xy * 0.5 + 0.5;
+        material.screenUv.zw = vec2(0.0);
+    }
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec2 uv = vec2(variable_screenUv.x, 1.0 - variable_screenUv.y);
+        float center = texture(materialParams_maskTex, uv).r;
+        vec2 px = materialParams.params.xy * materialParams.params.z;
+        float m = 0.0;
+        m = max(m, texture(materialParams_maskTex, uv + vec2( px.x, 0.0)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2(-px.x, 0.0)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2(0.0,  px.y)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2(0.0, -px.y)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2( px.x,  px.y)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2( px.x, -px.y)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2(-px.x,  px.y)).r);
+        m = max(m, texture(materialParams_maskTex, uv + vec2(-px.x, -px.y)).r);
+        float edge = clamp(m - center, 0.0, 1.0);
+        material.baseColor = vec4(materialParams.color * edge, edge);
+    }
+}

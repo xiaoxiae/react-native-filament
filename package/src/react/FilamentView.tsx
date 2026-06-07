@@ -22,6 +22,17 @@ export interface FilamentProps extends PublicNativeProps {
    * @note Don't call any methods on `engine` here - this will lead to deadlocks!
    */
   renderCallback: RenderCallback
+
+  /**
+   * Chalkbag (#309): optional in-frame render pass. When provided, it REPLACES the default
+   * `renderer.render(view)` between `beginFrame` and `endFrame`, so you can drive a multi-pass
+   * render (e.g. offscreen mask → main → composite) for a single swapchain frame. You are then
+   * responsible for rendering the main view yourself (`renderer.render(view)`).
+   *
+   * @note Runs on the worklet thread inside the frame. Only call `renderer.render(...)` here —
+   * create views / render targets outside the frame.
+   */
+  renderPass?: RenderCallback
 }
 
 type RefType = InstanceType<FilamentViewNativeType>
@@ -73,7 +84,7 @@ export class FilamentView extends React.PureComponent<FilamentProps> {
   }
 
   private latestToken = 0
-  private updateRenderCallback = async (callback: RenderCallback, swapChain: SwapChain) => {
+  private updateRenderCallback = async (callback: RenderCallback, renderPass: RenderCallback | undefined, swapChain: SwapChain) => {
     const currentToken = ++this.latestToken
     const { renderer, view, workletContext, choreographer } = this.getContext()
 
@@ -107,7 +118,12 @@ export class FilamentView extends React.PureComponent<FilamentProps> {
             callback(frameInfo)
 
             if (renderer.beginFrame(swapChain, frameInfo.timestamp)) {
-              renderer.render(view)
+              if (renderPass != null) {
+                // Chalkbag (#309): user-driven multi-pass render for this frame.
+                renderPass(frameInfo)
+              } else {
+                renderer.render(view)
+              }
               renderer.endFrame()
             }
           } catch (error) {
@@ -160,9 +176,12 @@ export class FilamentView extends React.PureComponent<FilamentProps> {
     if (prevProps.enableTransparentRendering !== this.props.enableTransparentRendering) {
       this.updateTransparentRendering(this.props.enableTransparentRendering ?? true)
     }
-    if (prevProps.renderCallback !== this.props.renderCallback && this.swapChain != null) {
+    if (
+      (prevProps.renderCallback !== this.props.renderCallback || prevProps.renderPass !== this.props.renderPass) &&
+      this.swapChain != null
+    ) {
       // Note: if swapChain was null, the renderCallback will be set/updated in onSurfaceCreated, which uses the latest renderCallback prop
-      this.updateRenderCallback(this.props.renderCallback, this.swapChain)
+      this.updateRenderCallback(this.props.renderCallback, this.props.renderPass, this.swapChain)
     }
   }
 
@@ -271,8 +290,8 @@ export class FilamentView extends React.PureComponent<FilamentProps> {
     engine.setSwapChain(this.swapChain)
 
     // Set the render callback in the choreographer:
-    const { renderCallback } = this.props
-    await this.updateRenderCallback(renderCallback, this.swapChain)
+    const { renderCallback, renderPass } = this.props
+    await this.updateRenderCallback(renderCallback, renderPass, this.swapChain)
   }
 
   /**

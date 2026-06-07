@@ -7,6 +7,8 @@ import { StyleSheet, ViewStyle } from 'react-native'
 type ForwardProps = PublicNativeProps & {
   style?: ViewStyle
   renderCallback?: RenderCallback
+  // Chalkbag (#309): in-frame multi-pass render hook — left in forwardProps so it spreads onto FilamentView.
+  renderPass?: RenderCallback
 }
 
 /**

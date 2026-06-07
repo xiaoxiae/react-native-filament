@@ -1,4 +1,5 @@
 import { Float3, Float4, Mat3f } from './Math'
+import type { Texture } from './Texture'
 
 export type CullingMode = 'none' | 'back' | 'front' | 'frontAndBack'
 
@@ -13,6 +14,8 @@ export interface MaterialInstance {
   setMat3fParameter(name: string, value: Mat3f): void
   setFloat3Parameter(name: string, vector: Float3): void
   setFloat4Parameter(name: string, vector: Float4): void
+  /** Chalkbag (#309): bind an existing GPU texture (e.g. a RenderTarget color attachment) as a sampler2d param. */
+  setTextureParameter(name: string, texture: Texture): void
   getFloatParameter(name: string): number
   getIntParameter(name: string): number
   getMat3fParameter(name: string): Mat3f

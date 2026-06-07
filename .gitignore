@@ -8,3 +8,4 @@ node_modules/
 # Chalkbag harness derived assets (regenerate via examples/Shared/src/chalkbag/bundle-assets.mjs)
 examples/*/assets/cb_*.glb
 examples/*/assets/cb_*.ktx
+examples/*/assets/cb_*.filamat

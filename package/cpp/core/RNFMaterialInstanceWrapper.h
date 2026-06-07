@@ -6,6 +6,7 @@
 
 #include <filament/MaterialInstance.h>
 
+#include "RNFTextureWrapper.h"
 #include "jsi/RNFHybridObject.h"
 
 namespace margelo {
@@ -32,6 +33,8 @@ public: // Public API
   void setIntParameter(std::string name, int value);
   void setFloat3Parameter(std::string name, std::vector<double> vector);
   void setFloat4Parameter(std::string name, std::vector<double> vector);
+  // Chalkbag (#309): bind an existing GPU texture (e.g. a RenderTarget color attachment) as a sampler param.
+  void setTextureParameter(std::string name, std::shared_ptr<TextureWrapper> texture);
   void setMat3fParameter(std::string name, std::vector<double> value);
   double getFloatParameter(std::string name);
   int getIntParameter(std::string name);

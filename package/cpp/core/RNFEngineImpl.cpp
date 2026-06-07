@@ -13,8 +13,10 @@
 #include <filament/Fence.h>
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
+#include <filament/RenderTarget.h>
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
+#include <filament/Texture.h>
 #include <filament/SwapChain.h>
 #include <filament/TransformManager.h>
 #include <filament/View.h>
@@ -197,6 +199,22 @@ std::shared_ptr<Scene> EngineImpl::createScene() {
   return scene;
 }
 
+std::shared_ptr<Scene> EngineImpl::createSceneBare() {
+  auto dispatcher = _rendererDispatcher;
+  // NOTE: unlike createScene(), the deleter does NOT call materialProvider->destroyMaterials().
+  // Destroying the shared provider's materials would free the uber-materials still bound to other
+  // scenes' renderables, crashing the render thread. Extra scenes only own entities, not materials.
+  std::shared_ptr<Scene> scene = References<Scene>::adoptEngineRef(
+      _engine, _engine->createScene(), [dispatcher](std::shared_ptr<Engine> engine, Scene* scene) {
+        dispatcher->runAsync([engine, scene]() {
+          Logger::log(TAG, "Destroying bare scene...");
+          engine->destroy(scene);
+        });
+      });
+
+  return scene;
+}
+
 std::shared_ptr<View> EngineImpl::createView() {
   auto dispatcher = _rendererDispatcher;
   std::shared_ptr view =
@@ -208,6 +226,57 @@ std::shared_ptr<View> EngineImpl::createView() {
       });
 
   return view;
+}
+
+std::shared_ptr<RenderTargetWrapper> EngineImpl::createRenderTarget(uint32_t width, uint32_t height) {
+  auto dispatcher = _rendererDispatcher;
+
+  // Color attachment: RGBA8, sampleable (so the composite material can read it) + color-renderable.
+  Texture* colorPtr = Texture::Builder()
+                          .width(width)
+                          .height(height)
+                          .levels(1)
+                          .format(Texture::InternalFormat::RGBA8)
+                          .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                          .build(*_engine);
+  std::shared_ptr<Texture> color = References<Texture>::adoptEngineRef(
+      _engine, colorPtr, [dispatcher](std::shared_ptr<Engine> engine, Texture* texture) {
+        dispatcher->runAsync([engine, texture]() {
+          Logger::log(TAG, "Destroying RT color texture...");
+          engine->destroy(texture);
+        });
+      });
+
+  // Depth attachment: DEPTH32F, depth-attachment usage only.
+  Texture* depthPtr = Texture::Builder()
+                          .width(width)
+                          .height(height)
+                          .levels(1)
+                          .format(Texture::InternalFormat::DEPTH32F)
+                          .usage(Texture::Usage::DEPTH_ATTACHMENT)
+                          .build(*_engine);
+  std::shared_ptr<Texture> depth = References<Texture>::adoptEngineRef(
+      _engine, depthPtr, [dispatcher](std::shared_ptr<Engine> engine, Texture* texture) {
+        dispatcher->runAsync([engine, texture]() {
+          Logger::log(TAG, "Destroying RT depth texture...");
+          engine->destroy(texture);
+        });
+      });
+
+  RenderTarget* rtPtr = RenderTarget::Builder()
+                            .texture(RenderTarget::AttachmentPoint::COLOR0, colorPtr)
+                            .texture(RenderTarget::AttachmentPoint::DEPTH, depthPtr)
+                            .build(*_engine);
+  std::shared_ptr<RenderTarget> renderTarget = References<RenderTarget>::adoptEngineRef(
+      _engine, rtPtr, [dispatcher](std::shared_ptr<Engine> engine, RenderTarget* rt) {
+        dispatcher->runAsync([engine, rt]() {
+          Logger::log(TAG, "Destroying render target...");
+          engine->destroy(rt);
+        });
+      });
+
+  auto colorWrapper = std::make_shared<TextureWrapper>(color);
+  return std::make_shared<RenderTargetWrapper>(renderTarget, colorWrapper, depth);
 }
 
 std::shared_ptr<Camera> EngineImpl::createCamera() {

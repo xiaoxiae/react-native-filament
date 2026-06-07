@@ -14,6 +14,7 @@ import { TFilamentRecorder } from './FilamentRecorder'
 import { SwapChain } from './SwapChain'
 import { NameComponentManager } from './NameComponentManager'
 import { CameraManipulator, OrbitCameraManipulatorConfig } from './CameraManipulator'
+import { RenderTarget } from './RenderTarget'
 
 export interface Engine extends PointerHolder {
   setSurfaceProvider(surfaceProvider: SurfaceProvider): void
@@ -53,6 +54,19 @@ export interface Engine extends PointerHolder {
   getScene(): Scene
   getCamera(): RNFCamera
   getView(): View
+  /**
+   * Chalkbag (#309): create an additional empty Scene (e.g. for the outline mask / composite passes).
+   */
+  createScene(): Scene
+  /**
+   * Chalkbag (#309): create an additional View (a rendering pass). Wire it up with
+   * {@link View#setScene}, {@link View#setCamera}, {@link View#setViewport}, {@link View#setRenderTarget}.
+   */
+  createView(): View
+  /**
+   * Chalkbag (#309): create an offscreen RenderTarget (RGBA8 color + depth) at the given pixel size.
+   */
+  createRenderTarget(width: number, height: number): RenderTarget
   createOrbitCameraManipulator(config: OrbitCameraManipulatorConfig): CameraManipulator
   /**
    * @private

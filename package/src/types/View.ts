@@ -4,6 +4,7 @@ import { AmbientOcclusionOptions, DynamicResolutionOptions, BloomOptions } from 
 import { PointerHolder } from './PointerHolder'
 import { Scene } from './Scene'
 import { Float3 } from './Math'
+import { RenderTarget } from './RenderTarget'
 
 export interface Viewport {
   bottom: number
@@ -36,6 +37,15 @@ export interface View extends PointerHolder {
   // Can return 0 if the view isn't ready yet.
   getAspectRatio(): number
   getViewport(): Viewport
+  /**
+   * Chalkbag (#309): wire this View's scene/camera/viewport/target/blend for a custom render pass.
+   */
+  setScene(scene: Scene): void
+  setCamera(camera: RNFCamera): void
+  setViewport(left: number, bottom: number, width: number, height: number): void
+  /** Render into an offscreen target instead of the swapchain. Pass null to restore the swapchain. */
+  setRenderTarget(renderTarget: RenderTarget | null): void
+  setBlendMode(blendMode: 'opaque' | 'translucent'): void
   setAmbientOcclusionOptions(options: AmbientOcclusionOptions): void
   getAmbientOcclusionOptions(): AmbientOcclusionOptions
   setDynamicResolutionOptions(options: DynamicResolutionOptions): void

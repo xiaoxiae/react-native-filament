@@ -13,6 +13,7 @@
 #include "RNFLightManagerWrapper.h"
 #include "RNFMaterialWrapper.h"
 #include "RNFNameComponentManagerWrapper.h"
+#include "RNFRenderTargetWrapper.h"
 #include "RNFRenderableManagerWrapper.h"
 #include "RNFSurface.h"
 #include "RNFSurfaceProvider.h"
@@ -66,6 +67,8 @@ public:
   void createAndSetSkybox(std::shared_ptr<FilamentBuffer> textureBuffer, std::optional<bool> showSun, std::optional<float> envIntensity);
   void clearSkybox();
   void setAutomaticInstancingEnabled(bool enabled);
+  // Chalkbag (#309): create an offscreen RenderTarget (RGBA8 color + depth) for the outline mask pass.
+  std::shared_ptr<RenderTargetWrapper> createRenderTarget(uint32_t width, uint32_t height);
 
   void flushAndWait();
 
@@ -98,6 +101,10 @@ private:
   void synchronizePendingFrames();
   std::shared_ptr<Renderer> createRenderer(float displayRefreshRate);
   std::shared_ptr<Scene> createScene();
+  // Chalkbag (#309): scene whose deleter ONLY destroys the scene — it must NOT call
+  // materialProvider->destroyMaterials() (that nukes the shared uber-materials used by every
+  // other scene's GLBs → render-thread SIGSEGV). Use for the extra outline mask/composite scenes.
+  std::shared_ptr<Scene> createSceneBare();
   std::shared_ptr<View> createView();
   std::shared_ptr<Camera> createCamera();
   // Internal helper method to turn an FilamentAsset ptr into a FilamentAssetWrapper

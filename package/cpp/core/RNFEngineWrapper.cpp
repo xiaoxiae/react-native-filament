@@ -48,6 +48,9 @@ void EngineWrapper::loadHybridMethods() {
   registerHybridMethod("createMaterial", &EngineWrapper::createMaterial, this);
   registerHybridMethod("createLightManager", &EngineWrapper::createLightManager, this);
   registerHybridMethod("createRenderer", &EngineWrapper::createRenderer, this);
+  registerHybridMethod("createScene", &EngineWrapper::createScene, this);
+  registerHybridMethod("createView", &EngineWrapper::createView, this);
+  registerHybridMethod("createRenderTarget", &EngineWrapper::createRenderTarget, this);
   registerHybridMethod("createNameComponentManager", &EngineWrapper::createNameComponentManager, this);
   registerHybridMethod("createAndSetSkyboxByColor", &EngineWrapper::createAndSetSkyboxByColor, this);
   registerHybridMethod("createAndSetSkyboxByTexture", &EngineWrapper::createAndSetSkyboxByTexture, this);
@@ -173,6 +176,20 @@ std::shared_ptr<RendererWrapper> EngineWrapper::createRenderer() {
 }
 std::shared_ptr<RenderableManagerWrapper> EngineWrapper::createRenderableManager() {
   return pointee()->createRenderableManager();
+}
+std::shared_ptr<SceneWrapper> EngineWrapper::createScene() {
+  // Use the BARE scene (deleter doesn't destroy shared materials) — the JS-exposed createScene is
+  // for extra scenes (e.g. #309 outline mask/composite), never the engine's primary scene.
+  std::shared_ptr<Scene> scene = pointee()->createSceneBare();
+  return std::make_shared<SceneWrapper>(scene);
+}
+std::shared_ptr<ViewWrapper> EngineWrapper::createView() {
+  std::shared_ptr<View> view = pointee()->createView();
+  float pixelDensityRatio = pointee()->_densityPixelRatio;
+  return std::make_shared<ViewWrapper>(view, pixelDensityRatio);
+}
+std::shared_ptr<RenderTargetWrapper> EngineWrapper::createRenderTarget(double width, double height) {
+  return pointee()->createRenderTarget(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 }
 std::shared_ptr<NameComponentManagerWrapper> EngineWrapper::createNameComponentManager() {
   return pointee()->createNameComponentManager();

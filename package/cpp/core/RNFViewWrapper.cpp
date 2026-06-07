@@ -27,6 +27,50 @@ void ViewWrapper::loadHybridMethods() {
   registerHybridMethod("projectWorldToScreen", &ViewWrapper::projectWorldToScreen, this);
   registerHybridMethod("pickEntity", &ViewWrapper::pickEntity, this);
   registerHybridMethod("getViewport", &ViewWrapper::getViewport, this);
+  registerHybridMethod("setScene", &ViewWrapper::setScene, this);
+  registerHybridMethod("setCamera", &ViewWrapper::setCamera, this);
+  registerHybridMethod("setViewport", &ViewWrapper::setViewport, this);
+  registerHybridMethod("setRenderTarget", &ViewWrapper::setRenderTarget, this);
+  registerHybridMethod("setBlendMode", &ViewWrapper::setBlendMode, this);
+}
+
+void ViewWrapper::setScene(std::shared_ptr<SceneWrapper> scene) {
+  if (!scene) {
+    [[unlikely]];
+    throw std::invalid_argument("Scene is null");
+  }
+  std::unique_lock lock(_mutex);
+  _scene = scene->getScene(); // keep alive for the view's lifetime
+  pointee()->setScene(_scene.get());
+}
+
+void ViewWrapper::setCamera(std::shared_ptr<CameraWrapper> camera) {
+  if (!camera) {
+    [[unlikely]];
+    throw std::invalid_argument("Camera is null");
+  }
+  std::unique_lock lock(_mutex);
+  _camera = camera->getCamera(); // keep alive for the view's lifetime
+  pointee()->setCamera(_camera.get());
+}
+
+void ViewWrapper::setViewport(double left, double bottom, double width, double height) {
+  pointee()->setViewport({static_cast<int32_t>(left), static_cast<int32_t>(bottom), static_cast<uint32_t>(width),
+                          static_cast<uint32_t>(height)});
+}
+
+void ViewWrapper::setRenderTarget(std::optional<std::shared_ptr<RenderTargetWrapper>> renderTarget) {
+  if (renderTarget.has_value() && renderTarget.value() != nullptr) {
+    pointee()->setRenderTarget(renderTarget.value()->getRenderTarget());
+  } else {
+    pointee()->setRenderTarget(nullptr);
+  }
+}
+
+void ViewWrapper::setBlendMode(const std::string& blendMode) {
+  View::BlendMode mode;
+  EnumMapper::convertJSUnionToEnum(blendMode, &mode);
+  pointee()->setBlendMode(mode);
 }
 
 double ViewWrapper::getAspectRatio() {

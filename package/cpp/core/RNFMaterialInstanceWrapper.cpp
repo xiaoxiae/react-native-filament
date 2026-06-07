@@ -6,6 +6,7 @@
 #include "RNFCullingModeEnum.h"
 #include "RNFTransparencyModeEnum.h"
 #include <filament/Material.h>
+#include <filament/TextureSampler.h>
 #include <math/mat3.h>
 
 namespace margelo {
@@ -17,6 +18,7 @@ void MaterialInstanceWrapper::loadHybridMethods() {
   registerHybridMethod("setIntParameter", &MaterialInstanceWrapper::setIntParameter, this);
   registerHybridMethod("setFloat3Parameter", &MaterialInstanceWrapper::setFloat3Parameter, this);
   registerHybridMethod("setFloat4Parameter", &MaterialInstanceWrapper::setFloat4Parameter, this);
+  registerHybridMethod("setTextureParameter", &MaterialInstanceWrapper::setTextureParameter, this);
   registerHybridMethod("setMat3fParameter", &MaterialInstanceWrapper::setMat3fParameter, this);
   registerHybridMethod("getFloatParameter", &MaterialInstanceWrapper::getFloatParameter, this);
   registerHybridMethod("getIntParameter", &MaterialInstanceWrapper::getIntParameter, this);
@@ -116,6 +118,23 @@ void MaterialInstanceWrapper::setFloat4Parameter(std::string name, std::vector<d
   double a = vector[3];
 
   _materialInstance->setParameter(name.c_str(), math::float4({r, g, b, a}));
+}
+
+void MaterialInstanceWrapper::setTextureParameter(std::string name, std::shared_ptr<TextureWrapper> texture) {
+  std::unique_lock lock(_mutex);
+  if (!texture) {
+    throw std::invalid_argument("MaterialInstanceWrapper::setTextureParameter: texture is null");
+  }
+
+  const Material* material = _materialInstance->getMaterial();
+  if (!material->hasParameter(name.c_str())) {
+    throw std::runtime_error("MaterialInstanceWrapper::setTextureParameter: Material does not have parameter \"" + name + "\"!");
+  }
+
+  // Clamp + linear: appropriate for sampling an offscreen RenderTarget color attachment.
+  TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR,
+                         TextureSampler::WrapMode::CLAMP_TO_EDGE);
+  _materialInstance->setParameter(name.c_str(), texture->getTexture(), sampler);
 }
 
 void MaterialInstanceWrapper::setMat3fParameter(std::string name, std::vector<double> value) {

@@ -18,6 +18,11 @@ public:
 
   void loadHybridMethods() override;
 
+  // Internal API (not exposed to JS) — raw scene for native consumers (e.g. ViewWrapper.setScene).
+  std::shared_ptr<Scene> getScene() {
+    return pointee();
+  }
+
   void addAsset(std::shared_ptr<gltfio::FilamentAsset> asset);
   void removeAsset(std::shared_ptr<gltfio::FilamentAsset> asset);
 
