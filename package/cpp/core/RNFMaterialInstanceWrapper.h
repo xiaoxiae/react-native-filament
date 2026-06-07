@@ -6,6 +6,10 @@
 
 #include <filament/MaterialInstance.h>
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+
 #include "RNFTextureWrapper.h"
 #include "jsi/RNFHybridObject.h"
 
@@ -51,6 +55,8 @@ public: // Internal API
 private:
   std::mutex _mutex;
   MaterialInstance* _materialInstance;
+  // Keep bound textures alive while this instance references them (per parameter name).
+  std::unordered_map<std::string, std::shared_ptr<TextureWrapper>> _boundTextures;
 };
 
 } // namespace margelo

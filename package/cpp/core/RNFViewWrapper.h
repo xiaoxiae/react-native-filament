@@ -64,6 +64,7 @@ private:
   std::mutex _mutex;
   std::shared_ptr<Scene> _scene;
   std::shared_ptr<Camera> _camera;
+  std::shared_ptr<RenderTargetWrapper> _renderTarget; // keep the RT alive while the View targets it
   float _densityPixelRatio;
 
 private:

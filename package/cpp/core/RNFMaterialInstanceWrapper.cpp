@@ -135,6 +135,8 @@ void MaterialInstanceWrapper::setTextureParameter(std::string name, std::shared_
   TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR,
                          TextureSampler::WrapMode::CLAMP_TO_EDGE);
   _materialInstance->setParameter(name.c_str(), texture->getTexture(), sampler);
+  // Retain the wrapper so the texture outlives this binding even if the caller drops its handle.
+  _boundTextures[name] = texture;
 }
 
 void MaterialInstanceWrapper::setMat3fParameter(std::string name, std::vector<double> value) {

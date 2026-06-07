@@ -56,12 +56,12 @@ export function useOutline({ enabled, holdGlbs, wallGlb, color, thickness }: Out
     holdBufs.length > 0 &&
     holdBufs.every((b) => b != null)
 
-  // Offscreen target size = physical-pixel viewport. The composite samples 0..1 UV, so exact size
-  // only needs to match the view aspect; window dims × density gives that for a full-screen view.
-  const { width, height } = Dimensions.get('window')
+  // Window dims (× density) are only a rebuild trigger (rotation/resize) + a fallback. The REAL
+  // RT/viewport size is read from the live View viewport inside the worklet (below) so the mask
+  // matches the camera's surface-driven projection even when the FilamentView isn't fullscreen
+  // (safe-area / tab chrome) — otherwise the rim is anisotropic / misregistered.
+  const { width: winW, height: winH } = Dimensions.get('window')
   const density = PixelRatio.get()
-  const W = Math.max(1, Math.round(width * density))
-  const H = Math.max(1, Math.round(height * density))
 
   const pipeline = useDisposableResource(() => {
     if (!enabled || !buffersReady) return undefined
@@ -69,6 +69,11 @@ export function useOutline({ enabled, holdGlbs, wallGlb, color, thickness }: Out
     return workletContext.runAsync(() => {
       'worklet'
       const rm = engine.createRenderableManager()
+
+      // Prefer the actual physical-pixel viewport; fall back to window dims if not ready yet.
+      const vp = view.getViewport()
+      const W = vp.width > 0 ? vp.width : Math.max(1, Math.round(winW * density))
+      const H = vp.height > 0 ? vp.height : Math.max(1, Math.round(winH * density))
 
       // IMPORTANT: keep the Material wrappers alive (return them below). If only the default
       // MaterialInstance is retained, the Material wrapper is GC'd → its destructor destroys the
@@ -124,30 +129,64 @@ export function useOutline({ enabled, holdGlbs, wallGlb, color, thickness }: Out
       compView.setBlendMode('translucent')
       compView.postProcessing = false
 
+      // F1: useDisposableResource calls `.release()` on teardown (toggle-off / unmount). Define it
+      // INSIDE this worklet so it's born a worklet function — a plain JS fn attached after the fact
+      // throws "function 'release' cannot be shared" when the result crosses the worklet boundary.
+      // Without a release() the whole pipeline (incl. the full-size RT) leaks each toggle cycle.
+      const release = () => {
+        'worklet'
+        const safe = (r: { release?: () => void } | undefined) => {
+          try {
+            if (r != null && r.release != null) r.release()
+          } catch {
+            // already released / engine torn down
+          }
+        }
+        // Order: views (ref scenes/rt/camera) → scenes → rt → asset copies → materials.
+        safe(compView)
+        safe(maskView)
+        safe(compScene)
+        safe(maskScene)
+        safe(rt)
+        for (const a of assets) safe(a)
+        safe(outlineMat)
+        safe(maskWhiteMat)
+        safe(maskBlackMat)
+        // NOTE: the composite `quad` entity + its vertex/index buffers come from the fork's
+        // createImageBackgroundShape, which doesn't track them for destruction (upstream TODO) →
+        // a small fixed per-build leak. The large resources above are all released here.
+      }
+
       // Return ALL created resources so JS retains them for the pipeline's lifetime (esp. the
-      // Material wrappers — see the GC note above).
-      return { maskView, compView, rt, maskScene, compScene, outlineMat, maskWhiteMat, maskBlackMat, assets }
+      // Material wrappers — a GC'd Material wrapper frees a material still bound to live renderables).
+      return { maskView, compView, rt, maskScene, compScene, outlineMat, maskWhiteMat, maskBlackMat, quad, assets, release }
     })
-    // Deps are intentionally only [enabled, buffersReady, W, H] — NOT the individual buffers.
-    // Each useBuffer resolves async at a different time; depending on them would re-run this
-    // (dispose + rebuild) on every resolution. buffersReady flips false→true exactly once, so the
-    // pipeline builds a single time. The buffers are captured and read only after buffersReady.
+    // Deps: [enabled, buffersReady, winW, winH] — NOT the individual buffers (each resolves async;
+    // depending on them would dispose+rebuild on every resolution). buffersReady flips once;
+    // winW/winH retrigger on rotation/resize (the worklet re-reads the live viewport on rebuild).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, buffersReady, W, H])
+  }, [enabled, buffersReady, winW, winH])
+
+  // Capture the raw View proxies as locals so the worklet closure does NOT capture the `pipeline`
+  // object — it carries a JS `release` function that cannot serialize to the worklet thread, which
+  // would corrupt the capture and make maskView/compView arrive as undefined → render(undefined)
+  // → render-thread SIGSEGV. The worklet only needs the two extra views + renderer + main view.
+  const maskView = pipeline?.maskView
+  const compView = pipeline?.compView
 
   const renderPass = useCallback(
     (frameInfo: FrameInfo) => {
       'worklet'
-      if (pipeline == null) {
+      if (maskView == null || compView == null) {
         renderer.render(view)
         return
       }
-      renderer.render(pipeline.maskView) // 1. mask → offscreen RT
+      renderer.render(maskView) // 1. mask → offscreen RT
       renderer.render(view) // 2. main → swapchain
-      renderer.render(pipeline.compView) // 3. rim → swapchain (translucent)
+      renderer.render(compView) // 3. rim → swapchain (translucent)
     },
-    [pipeline, renderer, view]
+    [maskView, compView, renderer, view]
   )
 
-  return enabled && pipeline != null ? renderPass : undefined
+  return enabled && maskView != null && compView != null ? renderPass : undefined
 }

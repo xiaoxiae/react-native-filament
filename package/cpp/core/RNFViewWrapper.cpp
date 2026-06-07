@@ -55,19 +55,24 @@ void ViewWrapper::setCamera(std::shared_ptr<CameraWrapper> camera) {
 }
 
 void ViewWrapper::setViewport(double left, double bottom, double width, double height) {
+  std::unique_lock lock(_mutex);
   pointee()->setViewport({static_cast<int32_t>(left), static_cast<int32_t>(bottom), static_cast<uint32_t>(width),
                           static_cast<uint32_t>(height)});
 }
 
 void ViewWrapper::setRenderTarget(std::optional<std::shared_ptr<RenderTargetWrapper>> renderTarget) {
+  std::unique_lock lock(_mutex);
   if (renderTarget.has_value() && renderTarget.value() != nullptr) {
-    pointee()->setRenderTarget(renderTarget.value()->getRenderTarget());
+    _renderTarget = renderTarget.value(); // keep alive for as long as the View targets it
+    pointee()->setRenderTarget(_renderTarget->getRenderTarget());
   } else {
+    _renderTarget = nullptr;
     pointee()->setRenderTarget(nullptr);
   }
 }
 
 void ViewWrapper::setBlendMode(const std::string& blendMode) {
+  std::unique_lock lock(_mutex);
   View::BlendMode mode;
   EnumMapper::convertJSUnionToEnum(blendMode, &mode);
   pointee()->setBlendMode(mode);

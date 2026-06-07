@@ -263,10 +263,19 @@ std::shared_ptr<RenderTargetWrapper> EngineImpl::createRenderTarget(uint32_t wid
         });
       });
 
+  if (colorPtr == nullptr || depthPtr == nullptr) {
+    throw std::runtime_error("EngineImpl::createRenderTarget: failed to create RT attachment texture(s)");
+  }
+
   RenderTarget* rtPtr = RenderTarget::Builder()
                             .texture(RenderTarget::AttachmentPoint::COLOR0, colorPtr)
                             .texture(RenderTarget::AttachmentPoint::DEPTH, depthPtr)
                             .build(*_engine);
+  if (rtPtr == nullptr) {
+    // Don't return a wrapper holding a null RT — setRenderTarget would silently fall back to the
+    // swapchain (mask renders to screen). Surface the failure instead.
+    throw std::runtime_error("EngineImpl::createRenderTarget: RenderTarget::Builder().build() returned null");
+  }
   std::shared_ptr<RenderTarget> renderTarget = References<RenderTarget>::adoptEngineRef(
       _engine, rtPtr, [dispatcher](std::shared_ptr<Engine> engine, RenderTarget* rt) {
         dispatcher->runAsync([engine, rt]() {
