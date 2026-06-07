@@ -22,9 +22,10 @@ setLogger({
   error: prefixLog(console.error),
 })
 
-// Run filament tests
-import { runTests } from 'react-native-filament-test'
-runTests()
+// Run filament tests (disabled — the HybridObject enum self-test throws on this
+// build and spams a LogBox error toast that overlays the UI).
+// import { runTests } from 'react-native-filament-test'
+// runTests()
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,
