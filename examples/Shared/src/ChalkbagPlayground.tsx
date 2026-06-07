@@ -14,14 +14,15 @@ import {
 import { holds as allHolds, routes, wallGlb, skyStrongKtx, skyChalkKtx } from './chalkbag/wallData'
 
 // How many holds to load (serial native loader — keep modest for now).
-const HOLD_LIMIT = 12
+const HOLD_LIMIT = 20
 const holds = allHolds.slice(0, HOLD_LIMIT)
 
-type SkyMode = 'strong' | 'chalk' | 'flat' | 'none'
-const SKY_ORDER: SkyMode[] = ['strong', 'chalk', 'flat', 'none']
+type SkyMode = 'strong' | 'chalk' | 'flat'
+const SKY_ORDER: SkyMode[] = ['strong', 'chalk', 'flat']
 
 // auto-frame camera from a set of holds: centroid + average normal, distance from spread
 function frameHolds(set: typeof allHolds, pad: number): { position: Float3; target: Float3 } {
+  if (set.length === 0) return { position: [0, 0, 8], target: [0, 0, 0] }
   const n = set.length || 1
   const centroid: Float3 = [0, 0, 0]
   const avgNormal: Float3 = [0, 0, 0]
@@ -55,8 +56,6 @@ function SkyboxFor({ mode }: { mode: SkyMode }) {
       return <Skybox source={skyChalkKtx} showSun={false} />
     case 'flat':
       return <Skybox colorInHex="#c8d0d8" showSun={false} />
-    case 'none':
-      return null
   }
 }
 
@@ -95,7 +94,11 @@ function Renderer() {
         <Btn label={`Sky: ${sky}`} onPress={cycleSky} />
         <Btn label={`Wall: ${showWall ? 'on' : 'off'}`} onPress={() => setShowWall((w) => !w)} />
         <Btn
-          label={routeIdx < 0 ? 'Route: all' : `Route: ${routes[routeIdx]?.name ?? routeIdx}`}
+          label={
+            routeIdx < 0
+              ? 'Route: all'
+              : `Route: ${routes[routeIdx]?.circuit ?? routes[routeIdx]?.name ?? `#${routeIdx}`}`
+          }
           onPress={cycleRoute}
         />
       </View>

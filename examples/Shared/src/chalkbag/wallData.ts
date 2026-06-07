@@ -3,7 +3,7 @@
 import type { Float3 } from 'react-native-filament'
 
 export type HoldDef = { id: string; glb: number; center: Float3; normal: Float3; color: string }
-export type RouteDef = { id: string; name: string; circuit: string | null; holdIds: string[] }
+export type RouteDef = { id: string; name: string | null; circuit: string | null; holdIds: string[] }
 
 export const wallGlb = require('@assets/cb_wall.glb') as number
 export const skyStrongKtx = require('@assets/cb_sky_strong.ktx') as number
@@ -56,8 +56,8 @@ export const holds: HoldDef[] = [
 ]
 
 export const routes: RouteDef[] = [
-  { id: "route_IYBOQcvG", name: undefined, circuit: "Modrá", holdIds: ["object_1Py2Y4mX","object_hCyMPViQ","object_z85pxhmU","object_lSU7wmXF","object_p81FlgDF","object_LW0AW1RR","object_hX2e1VDS","object_VotzXDtf"] },
-  { id: "route_uomeFalL", name: undefined, circuit: "Modrá", holdIds: ["object_xTzQJ2oq","object_4LxTJ0jb","object_oqUJUvt8","object_8WW1YIFB","object_VFkmaHi2","object_Y3XKY2uD","object_2ISTEbTK","object_rdC3QgCz","object_MOabpOTx","object_KBjNAtUb","object_UEgo0HaE","object_WeFCZlqA"] },
-  { id: "route_ji2XQNFy", name: undefined, circuit: "Žlutá", holdIds: ["object_OQNcth2a","object_MCA3W8jg","object_mBhMCHI4","object_5UwnC5BB","object_xzlE8Fvo","object_DJpb1yHO","object_kYlLs35V","object_jojKnw9j","object_PerMGc2e","object_qER12zF3","object_vtN5Xdur","object_BNkCYwQH","object_DoyROXgg","object_4lmfBePo"] },
-  { id: "route_T1kbJgkS", name: undefined, circuit: "Žlutá", holdIds: ["object_z1Q4VH1F","object_uIe95dMa","object_HFchykJI","object_2diXqfhF","object_DIsfghOj","object_BGZxjyVb","object_EEAWrNDy","object_jr2fUVrk","object_qydF8DiM"] },
+  { id: "route_IYBOQcvG", name: null, circuit: "Modrá", holdIds: ["object_1Py2Y4mX","object_hCyMPViQ","object_z85pxhmU","object_lSU7wmXF","object_p81FlgDF","object_LW0AW1RR","object_hX2e1VDS","object_VotzXDtf"] },
+  { id: "route_uomeFalL", name: null, circuit: "Modrá", holdIds: ["object_xTzQJ2oq","object_4LxTJ0jb","object_oqUJUvt8","object_8WW1YIFB","object_VFkmaHi2","object_Y3XKY2uD","object_2ISTEbTK","object_rdC3QgCz","object_MOabpOTx","object_KBjNAtUb","object_UEgo0HaE","object_WeFCZlqA"] },
+  { id: "route_ji2XQNFy", name: null, circuit: "Žlutá", holdIds: ["object_OQNcth2a","object_MCA3W8jg","object_mBhMCHI4","object_5UwnC5BB","object_xzlE8Fvo","object_DJpb1yHO","object_kYlLs35V","object_jojKnw9j","object_PerMGc2e","object_qER12zF3","object_vtN5Xdur","object_BNkCYwQH","object_DoyROXgg","object_4lmfBePo"] },
+  { id: "route_T1kbJgkS", name: null, circuit: "Žlutá", holdIds: ["object_z1Q4VH1F","object_uIe95dMa","object_HFchykJI","object_2diXqfhF","object_DIsfghOj","object_BGZxjyVb","object_EEAWrNDy","object_jr2fUVrk","object_qydF8DiM"] },
 ]
