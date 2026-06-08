@@ -8,8 +8,10 @@
 // requiring uv0 would make Filament SKIP the primitive ("missing required attributes").
 //
 // `params` packs (texelX, texelY, thickness, _) so it sets via setFloat4Parameter (no setFloat2).
-// V-flip note: on GL the RT texture origin is opposite the quad (manual 1.0 - y, matches the web MVP).
-// For the iOS/Metal port switch to the built-in uvToRenderTargetUV() which flips per-backend.
+// V-flip: use the built-in uvToRenderTargetUV() — it flips per BACKEND at compile time (identity on
+// WebGL/GL where the RT texture is bottom-up; 1.0-y on Metal/Vulkan where it's top-down). The old
+// hardcoded `1.0 - y` was right for the native (Metal/Vulkan) backend but double-flipped the web
+// (WebGL) one, so the web outline rendered upside-down (#309).
 material {
     name : outlinePost,
     shadingModel : unlit,
@@ -35,7 +37,7 @@ vertex {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        vec2 uv = vec2(variable_screenUv.x, 1.0 - variable_screenUv.y);
+        vec2 uv = uvToRenderTargetUV(variable_screenUv.xy);
         float center = texture(materialParams_maskTex, uv).r;
         vec2 px = materialParams.params.xy * materialParams.params.z;
         float m = 0.0;
