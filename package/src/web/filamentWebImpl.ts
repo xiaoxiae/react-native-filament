@@ -145,6 +145,102 @@ class WebImageQuadAsset {
     releaseSourceData() {}
 }
 
+/**
+ * #309 outline: a GPU texture wrapper. Wraps an embind `Texture` (the colour / depth attachment
+ * of a {@link WebRenderTarget}). `WebMaterialInstance.setTextureParameter` unwraps it to bind the
+ * mask colour texture into the composite material; `WebRenderTarget.getColorTexture()` returns it.
+ */
+class WebTexture {
+    constructor(public readonly fTexture: any) {}
+    isValid = true;
+    release() {
+        this.fTexture.delete?.();
+    }
+}
+
+/**
+ * #309 outline: an offscreen render target (RGBA8 colour + DEPTH24) the mask view renders into.
+ * Built via filament.js `Texture.Builder()` (one COLOR_ATTACHMENT|SAMPLEABLE colour + one
+ * DEPTH_ATTACHMENT depth) + `RenderTarget.Builder().texture(COLOR0, …).texture(DEPTH, …)` —
+ * mirrors the MVP (`mvp.js` ~L936-943) and the native binding. `getColorTexture()` hands the
+ * colour attachment to the composite material's `maskTex` sampler.
+ */
+class WebRenderTarget {
+    private readonly _color: WebTexture;
+    private readonly _depth: any;
+    constructor(
+        private readonly fEngine: any,
+        public readonly fRenderTarget: any,
+        fColor: any,
+        fDepth: any,
+    ) {
+        this._color = new WebTexture(fColor);
+        this._depth = fDepth;
+    }
+    isValid = true;
+    getColorTexture(): WebTexture {
+        return this._color;
+    }
+    release() {
+        // Order: the RenderTarget references the attachments — destroy it first, then the textures.
+        this.fEngine.destroyRenderTarget?.(this.fRenderTarget);
+        this.fRenderTarget.delete?.();
+        this._color.release();
+        this.fEngine.destroyTexture?.(this._depth);
+        this._depth.delete?.();
+    }
+
+    /** Build a colour+depth offscreen RenderTarget at `width × height` on `fEngine`. */
+    static build(F: FilamentModule, fEngine: any, width: number, height: number): WebRenderTarget {
+        const Fa = F as any;
+        const TU = Fa.Texture$Usage;
+        const TF = Fa.Texture$InternalFormat;
+        const AP = Fa.RenderTarget$AttachmentPoint;
+        // Usage is a bitfield; the embind enumerators are objects, so OR their `.value`.
+        const uflags = (...flags: any[]): number =>
+            flags.reduce((acc, x) => acc | (x && x.value != null ? x.value : x), 0);
+        const color = Fa.Texture.Builder()
+            .width(width)
+            .height(height)
+            .levels(1)
+            .usage(uflags(TU.COLOR_ATTACHMENT, TU.SAMPLEABLE))
+            .format(TF.RGBA8)
+            .build(fEngine);
+        const depth = Fa.Texture.Builder()
+            .width(width)
+            .height(height)
+            .levels(1)
+            .usage(uflags(TU.DEPTH_ATTACHMENT))
+            .format(TF.DEPTH24)
+            .build(fEngine);
+        const rt = Fa.RenderTarget.Builder()
+            .texture(AP.COLOR0, color)
+            .texture(AP.DEPTH, depth)
+            .build(fEngine);
+        return new WebRenderTarget(fEngine, rt, color, depth);
+    }
+}
+
+/**
+ * #309 outline: a compiled Material wrapper. `WebEngine.createMaterial` returns this (was the raw
+ * embind Material) so the outline can call `getDefaultInstance()` and get a {@link WebMaterialInstance}
+ * (whose `setTextureParameter`/`setFloat3Parameter`/`setFloat4Parameter` carry the app's contract).
+ * `createImageBackgroundShape` reads `fMaterial` to build the composite quad.
+ */
+class WebMaterial {
+    constructor(public readonly fMaterial: any) {}
+    isValid = true;
+    release() {
+        this.fMaterial.delete?.();
+    }
+    getDefaultInstance(): WebMaterialInstance {
+        return new WebMaterialInstance(this.fMaterial.getDefaultInstance());
+    }
+    createInstance(): WebMaterialInstance {
+        return new WebMaterialInstance(this.fMaterial.createInstance());
+    }
+}
+
 class WebScene {
     constructor(
         private reg: EntityRegistry,
@@ -218,6 +314,29 @@ class WebView {
     setViewport(left: number, bottom: number, width: number, height: number) {
         this.fView.setViewport([left, bottom, width, height]);
     }
+    // --- #309 outline: the mask + composite views are configured imperatively ---
+    /** Point this view at a Scene (the mask / composite scene). Accepts a {@link WebScene}. */
+    setScene(scene: WebScene) {
+        this.scene = scene;
+        this.fView.setScene(scene.fScene);
+    }
+    /** Point this view at a Camera (the outline views share the main camera). Accepts a {@link WebCamera}. */
+    setCamera(camera: WebCamera) {
+        this.camera = camera;
+        this.fView.setCamera(camera.fCamera);
+    }
+    /** Render into an offscreen target ({@link WebRenderTarget}), or `null` for the swapchain. */
+    setRenderTarget(rt: WebRenderTarget | null) {
+        this.fView.setRenderTarget(rt ? rt.fRenderTarget : null);
+    }
+    /** Composite view blends OVER the swapchain (translucent); mask view stays opaque. */
+    setBlendMode(mode: 'opaque' | 'translucent') {
+        const F: any = (window as any).Filament;
+        const BM = F.View$BlendMode;
+        if (this.fView.setBlendMode && BM) {
+            this.fView.setBlendMode(mode === 'translucent' ? BM.TRANSLUCENT : BM.OPAQUE);
+        }
+    }
     pickEntity(x: number, y: number): Promise<RNFEntity | null> {
         return new Promise((resolve) => {
             this.fView.pick(x, y, (res: any) => {
@@ -232,7 +351,11 @@ class WebView {
     }
     // post-processing / AA config — accepted + ignored on web for now
     set screenSpaceRefraction(_v: boolean) {}
-    set postProcessing(_v: boolean) {}
+    // #309 outline: the mask + composite views disable post-processing (no tone-mapping / bloom on
+    // the offscreen mask or the rim composite). Drive the real embind toggle when present.
+    set postProcessing(v: boolean) {
+        this.fView.setPostProcessingEnabled?.(v);
+    }
     set shadowing(_v: boolean) {}
     set antiAliasing(_v: string) {}
     set dithering(_v: string) {}
@@ -316,9 +439,31 @@ class WebMaterialInstance {
     setMat3fParameter(n: string, v: number[]) {
         this.fInstance.setMat3Parameter?.(n, v);
     }
-    /** Bind a sampler2d parameter to a Filament Texture + TextureSampler (image decals). */
-    setTextureParameter(n: string, texture: any, sampler: any) {
-        this.fInstance.setTextureParameter(n, texture, sampler);
+    /**
+     * Bind a sampler2d parameter to a Filament Texture + TextureSampler.
+     *
+     * `texture` may be a raw embind `Texture` (image-decal path) or a {@link WebTexture}
+     * wrapper (the #309 outline binds `rt.getColorTexture()`, which is a WebTexture). Unwrap it.
+     * `sampler` is optional: the outline calls this with a single texture arg, so synthesize a
+     * default linear / clamp-to-edge sampler (matching the MVP's `maskTex` sampler).
+     */
+    setTextureParameter(n: string, texture: any, sampler?: any) {
+        const fTexture = texture instanceof WebTexture ? texture.fTexture : texture;
+        const fSampler = sampler ?? WebMaterialInstance._defaultSampler();
+        this.fInstance.setTextureParameter(n, fTexture, fSampler);
+    }
+    /** Lazily-built linear/clamp sampler reused for single-arg texture binds (outline mask). */
+    private static _sampler: any = null;
+    private static _defaultSampler(): any {
+        if (!WebMaterialInstance._sampler) {
+            const F: any = (window as any).Filament;
+            WebMaterialInstance._sampler = new F.TextureSampler(
+                F.MinFilter.LINEAR,
+                F.MagFilter.LINEAR,
+                F.WrapMode.CLAMP_TO_EDGE,
+            );
+        }
+        return WebMaterialInstance._sampler;
     }
     setIntParameter(n: string, v: number) {
         this.fInstance.setParameterInt?.(n, v);
@@ -371,6 +516,7 @@ class WebRenderableManager {
     constructor(
         private reg: EntityRegistry,
         private fEngine: any,
+        private F?: FilamentModule,
     ) {}
     isValid = true;
     release() {}
@@ -393,6 +539,50 @@ class WebRenderableManager {
         const inst = this.rm().getInstance(this.reg.unwrap(entity));
         this.rm().setMaterialInstanceAt(inst, index, mi.fInstance);
         inst.delete?.();
+    }
+    /**
+     * #309 outline: build the fullscreen composite quad — a device-domain (clip-space) triangle pair
+     * drawn with `material`'s default instance (the `cb_outline_post` material declares
+     * `vertexDomain: device`, so the vertex positions are NDC and the `screenUv` varying is derived
+     * from them). Mirrors the MVP (`mvp.js` ~L960-972) + the image-quad builder above; returns the
+     * bare entity so the pipeline adds it to the composite scene. Accepts a {@link WebMaterial}.
+     */
+    createImageBackgroundShape(material: WebMaterial): RNFEntity {
+        const F: any = this.F ?? (window as any).Filament;
+        const fe = this.fEngine;
+        const mi = material.fMaterial.getDefaultInstance();
+        const VA = F.VertexAttribute;
+        const AT = F.VertexBuffer$AttributeType;
+        const vb = F.VertexBuffer.Builder()
+            .vertexCount(4)
+            .bufferCount(1)
+            .attribute(VA.POSITION, 0, AT.FLOAT3, 0, 20)
+            .attribute(VA.UV0, 0, AT.FLOAT2, 12, 20)
+            .build(fe);
+        // Fullscreen quad in clip space (vertexDomain: device); interleaved pos(3) + uv(2), stride 20.
+        // uv (0,0) bottom-left so the composite samples the mask RT right-side-up.
+        // prettier-ignore
+        vb.setBufferAt(fe, 0, new Float32Array([
+            -1, -1, 0, 0, 0,
+             1, -1, 0, 1, 0,
+             1,  1, 0, 1, 1,
+            -1,  1, 0, 0, 1,
+        ]));
+        const ib = F.IndexBuffer.Builder()
+            .indexCount(6)
+            .bufferType(F.IndexBuffer$IndexType.USHORT)
+            .build(fe);
+        ib.setBuffer(fe, new Uint16Array([0, 1, 2, 0, 2, 3]));
+        const entity = F.EntityManager.get().create();
+        F.RenderableManager.Builder(1)
+            .boundingBox({ center: [0, 0, 0], halfExtent: [1, 1, 1] })
+            .material(0, mi)
+            .geometry(0, F.RenderableManager$PrimitiveType.TRIANGLES, vb, ib)
+            .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
+            .build(fe, entity);
+        return this.reg.wrap(entity);
     }
     setAssetEntitiesOpacity(asset: WebFilamentAsset, opacity: number) {
         for (const e of asset.getRenderableEntities()) {
@@ -585,7 +775,7 @@ export class WebEngine {
         return new WebTransformManager(this.F, this.reg, this.fEngine);
     }
     createRenderableManager() {
-        return new WebRenderableManager(this.reg, this.fEngine);
+        return new WebRenderableManager(this.reg, this.fEngine, this.F);
     }
     createLightManager() {
         return new WebLightManager(this.F, this.reg, this.fEngine);
@@ -640,7 +830,21 @@ export class WebEngine {
         this._scene.fScene.setIndirectLight(ibl);
     }
     createMaterial(buffer: { bytes: Uint8Array }) {
-        return this.fEngine.createMaterial(buffer.bytes);
+        // Wrap in WebMaterial so callers get a `getDefaultInstance()` → WebMaterialInstance (the
+        // #309 outline path: engine.createMaterial(buf).getDefaultInstance().setFloat3Parameter/…).
+        return new WebMaterial(this.fEngine.createMaterial(buffer.bytes));
+    }
+    /** #309 outline: a fresh Scene distinct from the engine's main scene (mask / composite passes). */
+    createScene(): WebScene {
+        return new WebScene(this.reg, this.fEngine.createScene());
+    }
+    /** #309 outline: a fresh View (mask / composite pass), configured imperatively by the pipeline. */
+    createView(): WebView {
+        return new WebView(this.reg, this.fEngine.createView());
+    }
+    /** #309 outline: an offscreen RGBA8+depth render target sized to the mask pass. */
+    createRenderTarget(width: number, height: number): WebRenderTarget {
+        return WebRenderTarget.build(this.F, this.fEngine, width, height);
     }
     /**
      * First-class "image → textured quad" path (no GLB round-trip). Decodes `imageBuffer`
