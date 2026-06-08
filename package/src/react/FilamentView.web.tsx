@@ -13,12 +13,20 @@ import { WebEngine } from '../web/filamentWebImpl';
 
 export interface FilamentViewProps {
     renderCallback?: (frameInfo: FrameInfo) => void;
+    /**
+     * Chalkbag (#309): in-frame multi-pass hook (parity with native FilamentView). When provided it
+     * replaces the default single `renderer.render(view)` between beginFrame/endFrame, so the caller
+     * drives N passes (mask → main → composite) itself. Until the web outline binding ships
+     * (filamentWebImpl RenderTarget/View) the app's web render-pass hook returns undefined, so this
+     * is a no-op type-parity stub today.
+     */
+    renderPass?: (frameInfo: FrameInfo) => void;
     /** Called once the camera projection should be (re)applied — receives aspect ratio. */
     onResize?: (aspect: number, width: number, height: number) => void;
     style?: React.CSSProperties;
 }
 
-export function FilamentView({ children, renderCallback, onResize, style }: PropsWithChildren<FilamentViewProps>) {
+export function FilamentView({ children, renderCallback, renderPass, onResize, style }: PropsWithChildren<FilamentViewProps>) {
     const { engine, view, renderer, camera } = useFilamentContext();
     const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,7 +72,11 @@ export function FilamentView({ children, renderCallback, onResize, style }: Prop
             last = t;
             renderCallback?.(info);
             if ((renderer as any).beginFrame(swapChain, info.timestamp)) {
-                (renderer as any).render(view);
+                if (renderPass != null) {
+                    renderPass(info);
+                } else {
+                    (renderer as any).render(view);
+                }
                 (renderer as any).endFrame();
             }
             eng.execute();
@@ -77,7 +89,7 @@ export function FilamentView({ children, renderCallback, onResize, style }: Prop
             ro.disconnect();
             if (canvas.parentNode === host) host.removeChild(canvas);
         };
-    }, [engine, view, renderer, camera, renderCallback, onResize]);
+    }, [engine, view, renderer, camera, renderCallback, renderPass, onResize]);
 
     return (
         <div ref={hostRef} style={{ position: 'relative', overflow: 'hidden', ...(style ?? {}) }}>
