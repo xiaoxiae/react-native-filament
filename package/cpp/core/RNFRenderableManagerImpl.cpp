@@ -209,15 +209,22 @@ std::shared_ptr<EntityWrapper> RenderableManagerImpl::createPlane(std::shared_pt
   // All normals are pointing up
   const static short4 normals[]{{0, 1, 0, 0}, {0, 1, 0, 0}, {0, 1, 0, 0}, {0, 1, 0, 0}};
 
+  // UV0 maps the four corners 0->1 so textured materials (e.g. the chalkbag hold-stamp decal,
+  // which samples texture(baseColorMap, getUV0())) can sample the image; without it getUV0() is
+  // undefined and a transparent-blended decal renders invisible. Order matches `vertices` above.
+  const static float2 uvs[]{{0, 1}, {0, 0}, {1, 0}, {1, 1}};
+
   VertexBuffer* vertexBuffer = VertexBuffer::Builder()
                                    .vertexCount(4)
-                                   .bufferCount(2)
+                                   .bufferCount(3)
                                    .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
                                    .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::SHORT4)
                                    .normalized(VertexAttribute::TANGENTS)
+                                   .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2)
                                    .build(*_engine);
   vertexBuffer->setBufferAt(*_engine, 0, VertexBuffer::BufferDescriptor(vertices, vertexBuffer->getVertexCount() * sizeof(vertices[0])));
   vertexBuffer->setBufferAt(*_engine, 1, VertexBuffer::BufferDescriptor(normals, vertexBuffer->getVertexCount() * sizeof(normals[0])));
+  vertexBuffer->setBufferAt(*_engine, 2, VertexBuffer::BufferDescriptor(uvs, vertexBuffer->getVertexCount() * sizeof(uvs[0])));
   IndexBuffer* indexBuffer = IndexBuffer::Builder().indexCount(6).build(*_engine);
   indexBuffer->setBuffer(*_engine, IndexBuffer::BufferDescriptor(indices, indexBuffer->getIndexCount() * sizeof(uint32_t)));
 
