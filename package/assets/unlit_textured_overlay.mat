@@ -1,0 +1,32 @@
+// Overlay variant of unlit_textured: identical EXCEPT depthCulling:false, so the quad IGNORES the
+// depth buffer and always draws on top of the wall mesh. Used ONLY for route-tag grade circles +
+// area-name labels (which must float above geometry, never be occluded). Hold stamps keep the
+// depth-tested `unlit_textured` material — they sit ON the wall and must be occluded by geometry.
+material {
+    name : unlitTexturedQuadOverlay,
+    shadingModel : unlit,
+    blending : transparent,
+    doubleSided : true,
+    culling : none,
+    depthCulling : false,
+    depthWrite : false,
+    parameters : [
+        {
+            type : sampler2d,
+            name : baseColorMap
+        }
+    ],
+    requires : [
+        uv0
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 color = texture(materialParams_baseColorMap, getUV0());
+        // straight (non-premultiplied) alpha in the source PNG; Filament's
+        // transparent blending expects premultiplied, so premultiply here.
+        material.baseColor = vec4(color.rgb * color.a, color.a);
+    }
+}

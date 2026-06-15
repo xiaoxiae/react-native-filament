@@ -729,8 +729,10 @@ export class WebEngine {
     private _camera: WebCamera;
     private _view: WebView;
     private _skybox: any = null;
-    /** Cached unlit textured-quad material (one per engine, reused across image quads). */
-    private _quadMaterial: any = null;
+    /** Cached unlit textured-quad materials, keyed by the compiled `.filamat` bytes — so distinct
+     *  materials (e.g. the depth-tested stamp material vs the depth-off overlay material) each get
+     *  their own Material instead of the first one being reused for every quad. */
+    private _quadMaterials = new Map<any, any>();
     readonly nameComponentManager = new WebNameComponentManager();
     isValid = true;
 
@@ -873,8 +875,12 @@ export class WebEngine {
                 ? fe.createTextureFromJpeg(imgBytes, { srgb: true })
                 : fe.createTextureFromPng(imgBytes, { srgb: true });
 
-        if (!this._quadMaterial) this._quadMaterial = fe.createMaterial(matBytes);
-        const mi = this._quadMaterial.createInstance();
+        let quadMaterial = this._quadMaterials.get(matBytes);
+        if (!quadMaterial) {
+            quadMaterial = fe.createMaterial(matBytes);
+            this._quadMaterials.set(matBytes, quadMaterial);
+        }
+        const mi = quadMaterial.createInstance();
         const sampler = new F.TextureSampler(
             F.MinFilter.LINEAR_MIPMAP_LINEAR,
             F.MagFilter.LINEAR,
