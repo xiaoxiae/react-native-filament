@@ -11,12 +11,19 @@ import {
   type Float3,
 } from 'react-native-filament'
 
+import { lookAtCamera } from '@chalkbag/wall-scene/billboard'
+
 import { holds as allHolds, routes, areas, skyStrongKtx, skyChalkKtx } from './chalkbag/wallData'
+import { useChalkbagOverlays } from './chalkbag/useChalkbagOverlays'
 import { useOutline } from './chalkbag/useOutline'
 
-// How many holds to load (serial native loader — keep modest for now).
-const HOLD_LIMIT = 20
+// How many holds to load (serial native loader). The full bundled subset keeps
+// every route's tag/tube anchored to a rendered hold.
+const HOLD_LIMIT = 43
 const holds = allHolds.slice(0, HOLD_LIMIT)
+
+// Tag sprite scales to cycle through while iterating (the app ships 0.6).
+const TAG_SCALES = [0.4, 0.6, 0.8, 1.0]
 
 // The wall is per-area meshes now (the fixture's monolithic wall.glb was split).
 // The outline occluder API takes ONE glb (stable useBuffer count) — first area.
@@ -77,6 +84,10 @@ function Renderer() {
   const [showWall, setShowWall] = useState(true)
   const [routeIdx, setRouteIdx] = useState(-1) // -1 = overview (all loaded holds)
   const [outline, setOutline] = useState(false)
+  const [showTags, setShowTags] = useState(true)
+  const [showLabels, setShowLabels] = useState(true)
+  const [showTubes, setShowTubes] = useState(true)
+  const [tagScaleIdx, setTagScaleIdx] = useState(1)
 
   const renderPass = useOutline({
     enabled: outline,
@@ -96,8 +107,19 @@ function Renderer() {
     return frameHolds(holds, 1.8)
   }, [routeIdx])
 
+  // The overlay billboards re-pose against this camera whenever it (or a spec) changes.
+  const overlayCamera = useMemo(() => lookAtCamera(position, target), [position, target])
+  useChalkbagOverlays({
+    showTags,
+    showLabels,
+    showTubes,
+    tagScale: TAG_SCALES[tagScaleIdx],
+    camera: overlayCamera,
+  })
+
   const cycleSky = () => setSky((s) => SKY_ORDER[(SKY_ORDER.indexOf(s) + 1) % SKY_ORDER.length])
   const cycleRoute = () => setRouteIdx((i) => (i + 1 >= routes.length ? -1 : i + 1))
+  const cycleTagScale = () => setTagScaleIdx((i) => (i + 1) % TAG_SCALES.length)
 
   return (
     <View style={styles.root}>
@@ -124,6 +146,13 @@ function Renderer() {
           onPress={cycleRoute}
         />
         <Btn label={`Outline: ${outline ? 'on' : 'off'}`} onPress={() => setOutline((o) => !o)} />
+        <Btn label={`Tags: ${showTags ? 'on' : 'off'}`} onPress={() => setShowTags((v) => !v)} />
+        <Btn
+          label={`Labels: ${showLabels ? 'on' : 'off'}`}
+          onPress={() => setShowLabels((v) => !v)}
+        />
+        <Btn label={`Tubes: ${showTubes ? 'on' : 'off'}`} onPress={() => setShowTubes((v) => !v)} />
+        <Btn label={`Tag ×${TAG_SCALES[tagScaleIdx]}`} onPress={cycleTagScale} />
       </View>
     </View>
   )

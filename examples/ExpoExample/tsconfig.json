@@ -5,6 +5,10 @@
     "paths": {
       "react-native-filament": ["../../package/src/index"],
       "react-native-filament-test": ["../../package/src/test/RunTests"],
+      // @chalkbag/wall-scene: metro-only wiring (see metro.config.js) — these
+      // paths only resolve inside the Chalkbag monorepo checkout.
+      "@chalkbag/wall-scene": ["../../../../packages/wall-scene/index"],
+      "@chalkbag/wall-scene/*": ["../../../../packages/wall-scene/*"],
     }
   }
 }

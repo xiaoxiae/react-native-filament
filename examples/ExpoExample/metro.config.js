@@ -22,16 +22,34 @@ fs.readdirSync(assetPath).forEach(file => {
   assetFilesMap[file] = path.join(assetPath, file)
 })
 
-// Project's node modules list
+// Project's node modules list (scoped packages get their `@scope/name` keys so
+// the redirect below pins them too — e.g. @shopify/react-native-skia imported
+// from the out-of-tree wall-scene package must resolve to THIS example's copy,
+// never the Chalkbag app's, or the JS/native Skia versions skew).
 const nodeModulePath = path.resolve(__dirname, "node_modules")
 const projectNodeModulesMap = {}
 fs.readdirSync(nodeModulePath).forEach(file => {
-  projectNodeModulesMap[file] = path.join(nodeModulePath, file)
+  if (file.startsWith('@')) {
+    for (const child of fs.readdirSync(path.join(nodeModulePath, file))) {
+      projectNodeModulesMap[`${file}/${child}`] = path.join(nodeModulePath, file, child)
+    }
+  } else {
+    projectNodeModulesMap[file] = path.join(nodeModulePath, file)
+  }
 })
+
+// Chalkbag monorepo wiring (#296): @chalkbag/wall-scene (the shared overlay/scene
+// library) is consumed straight from the monorepo checkout this fork is a
+// submodule of — METRO-ONLY wiring, deliberately not a package.json dep, so a
+// standalone fork clone still `bun install`s (the Chalkbag playground screen then
+// fails to resolve, everything else works).
+const MONOREPO = path.resolve(root, '..', '..')
+const WALL_SCENE = path.join(MONOREPO, 'packages', 'wall-scene')
+const hasWallScene = fs.existsSync(path.join(WALL_SCENE, 'package.json'))
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = {
-  watchFolders: [root],
+  watchFolders: hasWallScene ? [root, WALL_SCENE] : [root],
 
   resolver: {
     assetExts: assetExts,
@@ -57,6 +75,13 @@ const config = {
             path.resolve(__dirname, 'assets', baseFileName),
           ]
         }
+      }
+
+      // @chalkbag/wall-scene → the monorepo package's TS source (see the
+      // MONOREPO wiring note above). Subpaths map to files in the package root.
+      if (hasWallScene && (moduleName === '@chalkbag/wall-scene' || moduleName.startsWith('@chalkbag/wall-scene/'))) {
+        const sub = moduleName === '@chalkbag/wall-scene' ? 'index' : moduleName.slice('@chalkbag/wall-scene/'.length)
+        return context.resolveRequest(context, path.join(WALL_SCENE, sub), platform);
       }
 
       // Check if this module should be redirected via extraNodeModules
