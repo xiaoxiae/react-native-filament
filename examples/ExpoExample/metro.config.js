@@ -44,7 +44,10 @@ fs.readdirSync(nodeModulePath).forEach(file => {
 // standalone fork clone still `bun install`s (the Chalkbag playground screen then
 // fails to resolve, everything else works).
 const MONOREPO = path.resolve(root, '..', '..')
-const WALL_SCENE = path.join(MONOREPO, 'packages', 'wall-scene')
+// CHALKBAG_WALL_SCENE overrides the default location (e.g. to point at a
+// monorepo git-worktree while a wall-scene branch is still in flight).
+const WALL_SCENE =
+  process.env.CHALKBAG_WALL_SCENE || path.join(MONOREPO, 'packages', 'wall-scene')
 const hasWallScene = fs.existsSync(path.join(WALL_SCENE, 'package.json'))
 
 /** @type {import('expo/metro-config').MetroConfig} */
