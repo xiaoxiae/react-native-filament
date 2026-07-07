@@ -7,7 +7,7 @@
 import { useMemo } from 'react'
 import { useBuffer, useFilamentContext } from 'react-native-filament'
 
-import { createBlobUtilFileSink } from '@chalkbag/wall-scene/file-sink'
+import { createBlobUtilFileSink } from '@chalkbag/wall-scene/file-sink-blob-util'
 import type {
   AreaLabelSpec,
   OverlayCamera,
