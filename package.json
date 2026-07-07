@@ -24,9 +24,12 @@
     "registry": "https://registry.npmjs.org/"
   },
   "workspaces": [
-      "examples/AppExampleFabric",
-      "examples/ExpoExample",
-      "examples/Shared",
-      "package"
+    "examples/AppExampleFabric",
+    "examples/ExpoExample",
+    "examples/Shared",
+    "package"
+  ],
+  "trustedDependencies": [
+    "@shopify/react-native-skia"
   ]
 }
