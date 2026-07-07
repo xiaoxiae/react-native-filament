@@ -11,12 +11,16 @@ import {
   type Float3,
 } from 'react-native-filament'
 
-import { holds as allHolds, routes, wallGlb, skyStrongKtx, skyChalkKtx } from './chalkbag/wallData'
+import { holds as allHolds, routes, areas, skyStrongKtx, skyChalkKtx } from './chalkbag/wallData'
 import { useOutline } from './chalkbag/useOutline'
 
 // How many holds to load (serial native loader — keep modest for now).
 const HOLD_LIMIT = 20
 const holds = allHolds.slice(0, HOLD_LIMIT)
+
+// The wall is per-area meshes now (the fixture's monolithic wall.glb was split).
+// The outline occluder API takes ONE glb (stable useBuffer count) — first area.
+const OCCLUDER_GLB = areas[0]?.glb
 
 // #309 outline: highlight the holds of the first route that intersects the loaded subset.
 // Module-constant (stable identity + length) so useOutline's per-hold useBuffer count is stable.
@@ -77,7 +81,7 @@ function Renderer() {
   const renderPass = useOutline({
     enabled: outline,
     holdGlbs: OUTLINE_HOLD_GLBS,
-    wallGlb,
+    wallGlb: OCCLUDER_GLB,
     color: [1.0, 0.85, 0.2],
     thickness: 2.5,
   })
@@ -102,7 +106,7 @@ function Renderer() {
         <DefaultLight />
         <SkyboxFor mode={sky} />
 
-        {showWall && <Model source={wallGlb} />}
+        {showWall && areas.map((a) => <Model key={a.index} source={a.glb} />)}
         {holds.map((h) => (
           <Model key={h.id} source={h.glb} />
         ))}
