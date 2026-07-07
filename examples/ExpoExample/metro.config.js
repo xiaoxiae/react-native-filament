@@ -87,6 +87,19 @@ const config = {
         return context.resolveRequest(context, path.join(WALL_SCENE, sub), platform);
       }
 
+      // Bare imports FROM the wall-scene package pin to the example's
+      // node_modules, then the fork root's (bun hoists unconflicted deps there).
+      // Without this the package's own node_modules symlink (→ the Chalkbag
+      // app's) wins the hierarchical walk and skews JS/native versions (Skia!).
+      if (hasWallScene && context.originModulePath && context.originModulePath.startsWith(WALL_SCENE)) {
+        const rootCandidate = path.join(root, 'node_modules', moduleName)
+        const target = projectNodeModulesMap[moduleName]
+          ?? (fs.existsSync(rootCandidate) ? rootCandidate : null)
+        if (target) {
+          return context.resolveRequest(context, target, platform);
+        }
+      }
+
       // Check if this module should be redirected via extraNodeModules
       // We need to manually handle this since we have a custom resolveRequest
       if (projectNodeModulesMap[moduleName]) {
