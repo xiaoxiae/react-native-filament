@@ -50,9 +50,17 @@ const WALL_SCENE =
   process.env.CHALKBAG_WALL_SCENE || path.join(MONOREPO, 'packages', 'wall-scene')
 const hasWallScene = fs.existsSync(path.join(WALL_SCENE, 'package.json'))
 
+// flipout-ts (wall-scene's optional peer) — the monorepo submodule checkout.
+const FLIPOUT = path.join(MONOREPO, 'forks', 'flipout-ts')
+const hasFlipout = fs.existsSync(path.join(FLIPOUT, 'package.json'))
+
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = {
-  watchFolders: hasWallScene ? [root, WALL_SCENE] : [root],
+  watchFolders: hasWallScene
+    ? hasFlipout
+      ? [root, WALL_SCENE, FLIPOUT]
+      : [root, WALL_SCENE]
+    : [root],
 
   resolver: {
     assetExts: assetExts,
@@ -95,6 +103,17 @@ const config = {
       // extension probe — a bare fs.existsSync misses `<path>.js` and the
       // request would fall through to the app's copy.
       if (hasWallScene && context.originModulePath && context.originModulePath.startsWith(WALL_SCENE)) {
+        // flipout-ts (wall-scene's optional peer, used by centerline.ts) ships
+        // as the monorepo submodule forks/flipout-ts — it's in neither the
+        // example's nor the fork root's node_modules, and the package's own
+        // node_modules symlink chain (→ app/node_modules, itself a symlink in
+        // a git worktree) is one Metro won't walk. Pin it to the checkout.
+        if (moduleName === 'flipout-ts') {
+          const flipout = path.join(MONOREPO, 'forks', 'flipout-ts')
+          if (fs.existsSync(path.join(flipout, 'package.json'))) {
+            return context.resolveRequest(context, flipout, platform);
+          }
+        }
         const rootCandidate = path.join(root, 'node_modules', moduleName)
         const rootExists = ['', '.js', '.ts', '.tsx', '.json'].some(ext => fs.existsSync(rootCandidate + ext))
         const target = projectNodeModulesMap[moduleName] ?? (rootExists ? rootCandidate : null)

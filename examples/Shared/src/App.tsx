@@ -22,6 +22,7 @@ import { SkyboxExample } from './SkyboxExample'
 import { MorphTargets } from './MorphTargets'
 import { ReanimatedRotation } from './ReanimatedRotation'
 import { ChalkbagPlayground } from './ChalkbagPlayground'
+import { ChalkbagRendererPlayground } from './ChalkbagRendererPlayground'
 
 function NavigationItem(props: { name: string; route: string }) {
   const navigation = useNavigation()
@@ -53,6 +54,7 @@ function HomeScreen() {
   return (
     <ScrollView style={{ flex: 1 }}>
       <NavigationItem name="🧗 Chalkbag Playground" route="ChalkbagPlayground" />
+      <NavigationItem name="🧱 Chalkbag Renderer (full)" route="ChalkbagRendererPlayground" />
       <NavigationItem name="▶️ Animation Transitions" route="AnimationTransitions" />
       <NavigationItem name="📸 Camera Pan" route="CameraPan" />
       <NavigationItem name="📹 Offscreen recording" route="AnimationTransitionsRecording" />
@@ -91,6 +93,7 @@ function App() {
         <Stack.Navigator>
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="ChalkbagPlayground" component={ChalkbagPlayground} options={{ headerShown: false }} />
+          <Stack.Screen name="ChalkbagRendererPlayground" component={ChalkbagRendererPlayground} options={{ headerShown: false }} />
           <Stack.Screen
             name="AnimationTransitions"
             component={AnimationTransitions}

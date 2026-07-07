@@ -130,6 +130,13 @@ if (!fs.existsSync(path.join(SHARED_ASSETS, 'cb_sky_strong.ktx'))) {
 // the web filamat is a different filament version and SIGABRTs native createParser).
 copy(path.join(MVP, 'unlit_textured.native.filamat'), 'cb_unlit_textured.filamat')
 copy(path.join(MVP, 'unlit_textured_overlay.native.filamat'), 'cb_unlit_textured_overlay.filamat')
+// Full-renderer playground (#296 P2): the app's IBL (Filament ambient light) +
+// the outline mask/composite materials (already present for useOutline, but
+// keep them in the copy set so a fresh checkout rebuilds everything).
+copy(path.join(MVP, 'env_ibl.ktx'), 'cb_env_ibl.ktx')
+copy(path.join(MVP, 'cb_mask_white.native.filamat'), 'cb_mask_white.filamat')
+copy(path.join(MVP, 'cb_mask_black.native.filamat'), 'cb_mask_black.filamat')
+copy(path.join(MVP, 'cb_outline_post.native.filamat'), 'cb_outline_post.filamat')
 for (const id of holdIds) copy(path.join(FIX, `holds/object_${id}.glb`), `cb_${id}.glb`)
 
 // --- codegen wallData.ts ---
@@ -156,6 +163,10 @@ export const skyStrongKtx = require('@assets/cb_sky_strong.ktx') as number
 export const skyChalkKtx = require('@assets/cb_sky.ktx') as number
 export const unlitTexturedMat = require('@assets/cb_unlit_textured.filamat') as number
 export const unlitTexturedOverlayMat = require('@assets/cb_unlit_textured_overlay.filamat') as number
+export const envIblKtx = require('@assets/cb_env_ibl.ktx') as number
+export const maskWhiteMat = require('@assets/cb_mask_white.filamat') as number
+export const maskBlackMat = require('@assets/cb_mask_black.filamat') as number
+export const outlinePostMat = require('@assets/cb_outline_post.filamat') as number
 
 export const holds: HoldDef[] = [
 ${holdEntries}

@@ -10,6 +10,10 @@ export const skyStrongKtx = require('@assets/cb_sky_strong.ktx') as number
 export const skyChalkKtx = require('@assets/cb_sky.ktx') as number
 export const unlitTexturedMat = require('@assets/cb_unlit_textured.filamat') as number
 export const unlitTexturedOverlayMat = require('@assets/cb_unlit_textured_overlay.filamat') as number
+export const envIblKtx = require('@assets/cb_env_ibl.ktx') as number
+export const maskWhiteMat = require('@assets/cb_mask_white.filamat') as number
+export const maskBlackMat = require('@assets/cb_mask_black.filamat') as number
+export const outlinePostMat = require('@assets/cb_outline_post.filamat') as number
 
 export const holds: HoldDef[] = [
   { id: "object_1Py2Y4mX", glb: require('@assets/cb_object_1Py2Y4mX.glb'), center: [5.503906938236458, 0.4439143333333334, -9.916633881567218], normal: [0.34818372030104205, -0.2583800048699638, -0.9011147929097176], color: "blue" },
