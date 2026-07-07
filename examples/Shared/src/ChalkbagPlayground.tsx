@@ -1,17 +1,23 @@
 import * as React from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import {
-  Camera,
   DefaultLight,
   FilamentScene,
   FilamentView,
   Model,
   Skybox,
+  useFilamentContext,
   type Float3,
 } from 'react-native-filament'
+import { GestureDetector } from 'react-native-gesture-handler'
+import { Vector3 } from 'three'
 
-import { lookAtCamera } from '@chalkbag/wall-scene/billboard'
+import { CameraRig } from '@chalkbag/wall-scene/camera-rig'
+import type { FilamentRendererContext } from '@chalkbag/wall-scene/filament-context'
+import { OrbitControls } from '@chalkbag/wall-scene/orbit-controls'
+import { useCanvasInput } from '@chalkbag/wall-scene/use-canvas-input'
+import { useFilamentRenderCallback } from '@chalkbag/wall-scene/use-filament-render-callback'
 
 import { holds as allHolds, routes, areas, skyStrongKtx, skyChalkKtx } from './chalkbag/wallData'
 import { useChalkbagOverlays } from './chalkbag/useChalkbagOverlays'
@@ -40,9 +46,10 @@ const OUTLINE_HOLD_GLBS = holds
 type SkyMode = 'strong' | 'chalk' | 'flat'
 const SKY_ORDER: SkyMode[] = ['strong', 'chalk', 'flat']
 
-// auto-frame camera from a set of holds: centroid + average normal, distance from spread
-function frameHolds(set: typeof allHolds, pad: number): { position: Float3; target: Float3 } {
-  if (set.length === 0) return { position: [0, 0, 8], target: [0, 0, 0] }
+// auto-frame a set of holds: centroid + average normal (the viewing axis) +
+// the subset's centers (so OrbitControls fits its zoom distance around them)
+function frameHolds(set: typeof allHolds, pad: number): { position: Float3; target: Float3; centers: Vector3[] } {
+  if (set.length === 0) return { position: [0, 0, 8], target: [0, 0, 0], centers: [] }
   const n = set.length || 1
   const centroid: Float3 = [0, 0, 0]
   const avgNormal: Float3 = [0, 0, 0]
@@ -65,6 +72,7 @@ function frameHolds(set: typeof allHolds, pad: number): { position: Float3; targ
   return {
     position: [centroid[0] + dir[0] * dist, centroid[1] + dir[1] * dist, centroid[2] + dir[2] * dist],
     target: centroid,
+    centers: set.map((h) => new Vector3(h.center[0], h.center[1], h.center[2])),
   }
 }
 
@@ -89,6 +97,8 @@ function Renderer() {
   const [showTubes, setShowTubes] = useState(true)
   const [tagScaleIdx, setTagScaleIdx] = useState(1)
 
+  const ctx = useFilamentContext()
+
   const renderPass = useOutline({
     enabled: outline,
     holdGlbs: OUTLINE_HOLD_GLBS,
@@ -97,8 +107,20 @@ function Renderer() {
     thickness: 2.5,
   })
 
+  // The interactive camera (#296): a CameraRig (three PerspectiveCamera +
+  // RenderLoopDriver) driven by the app's real OrbitControls — one-finger
+  // orbit, pinch/wheel zoom, spring-smoothed transitions, per-frame billboards.
+  const [rig] = useState(() => new CameraRig({ fov: 75 }))
+  const [orbit] = useState(() => {
+    const o = new OrbitControls(rig.camera, OrbitControls.ORBIT_TYPE.FAR)
+    rig.controls = o
+    return o
+  })
+  const rigRef = useRef<CameraRig | null>(rig)
+  const controlsRef = useRef<OrbitControls | null>(orbit)
+
   // camera frames either all loaded holds (overview) or the selected route's loaded holds
-  const { position, target } = useMemo(() => {
+  const framed = useMemo(() => {
     if (routeIdx >= 0 && routes[routeIdx]) {
       const ids = new Set(routes[routeIdx].holdIds)
       const subset = holds.filter((h) => ids.has(h.id))
@@ -107,15 +129,47 @@ function Renderer() {
     return frameHolds(holds, 1.8)
   }, [routeIdx])
 
-  // The overlay billboards re-pose against this camera whenever it (or a spec) changes.
-  const overlayCamera = useMemo(() => lookAtCamera(position, target), [position, target])
-  useChalkbagOverlays({
+  // (Re-)register the orbit around the framed subject. viewingDirection points
+  // FROM the camera TOWARD the target (register places the camera at
+  // target − direction·distance); frameHolds' position sits out along the mean
+  // hold normal, so the direction is its negation. The subset's hold centers go
+  // in as visiblePoints so the fitted zoom distance keeps them in view.
+  useEffect(() => {
+    const { position, target, centers } = framed
+    const t = new Vector3(target[0], target[1], target[2])
+    const dir = new Vector3(t.x - position[0], t.y - position[1], t.z - position[2]).normalize()
+    orbit.register(t, dir, OrbitControls.ORBIT_TYPE.FAR, null, centers.length ? centers : null, false)
+    return () => orbit.unregister()
+  }, [orbit, framed])
+
+  const overlays = useChalkbagOverlays({
     showTags,
     showLabels,
     showTubes,
     tagScale: TAG_SCALES[tagScaleIdx],
-    camera: overlayCamera,
   })
+
+  // Per-frame billboard re-posing: the rig polls the manager each frame via
+  // getBillboardTransforms — labels/tags track the camera during gestures.
+  useEffect(() => {
+    rig.overlays = overlays ?? null
+    return () => {
+      rig.overlays = null
+    }
+  }, [rig, overlays])
+
+  // The app's real render-loop bridge: a JS-thread rAF loop ticks the rig
+  // (controls.update → spring camera) and publishes camera + billboards to a
+  // render-thread worklet that applies them (native) — the same code path as
+  // the app's canvas. Replaces the declarative static <Camera>.
+  const renderCallback = useFilamentRenderCallback(
+    ctx as unknown as FilamentRendererContext,
+    rigRef,
+  )
+
+  // The app's real input layer: RNGH pan/pinch/tap fed into the controls ref.
+  const sizeRef = useRef({ width: 1, height: 1 })
+  const gesture = useCanvasInput({ controlsRef, sizeRef })
 
   const cycleSky = () => setSky((s) => SKY_ORDER[(SKY_ORDER.indexOf(s) + 1) % SKY_ORDER.length])
   const cycleRoute = () => setRouteIdx((i) => (i + 1 >= routes.length ? -1 : i + 1))
@@ -123,16 +177,25 @@ function Renderer() {
 
   return (
     <View style={styles.root}>
-      <FilamentView style={styles.view} enableTransparentRendering={true} renderPass={renderPass}>
-        <Camera cameraPosition={position} cameraTarget={target} />
-        <DefaultLight />
-        <SkyboxFor mode={sky} />
+      <GestureDetector gesture={gesture}>
+        <FilamentView
+          style={styles.view}
+          enableTransparentRendering={true}
+          renderCallback={renderCallback}
+          renderPass={renderPass}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout
+            sizeRef.current = { width: width || 1, height: height || 1 }
+          }}>
+          <DefaultLight />
+          <SkyboxFor mode={sky} />
 
-        {showWall && areas.map((a) => <Model key={a.index} source={a.glb} />)}
-        {holds.map((h) => (
-          <Model key={h.id} source={h.glb} />
-        ))}
-      </FilamentView>
+          {showWall && areas.map((a) => <Model key={a.index} source={a.glb} />)}
+          {holds.map((h) => (
+            <Model key={h.id} source={h.glb} />
+          ))}
+        </FilamentView>
+      </GestureDetector>
 
       <View style={styles.bar}>
         <Btn label={`Sky: ${sky}`} onPress={cycleSky} />

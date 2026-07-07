@@ -100,7 +100,11 @@ export interface ChalkbagOverlayParams {
   showTubes: boolean
   /** Tag sprite scale in world units — the app ships 0.6. */
   tagScale: number
-  camera: OverlayCamera
+  /**
+   * Optional one-shot pose for a STATIC camera. The interactive playground
+   * omits it — the CameraRig re-poses billboards per frame instead (#296).
+   */
+  camera?: OverlayCamera
 }
 
 export function useChalkbagOverlays(params: ChalkbagOverlayParams): OverlayManager | null {
