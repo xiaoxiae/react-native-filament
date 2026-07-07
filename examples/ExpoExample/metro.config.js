@@ -91,10 +91,13 @@ const config = {
       // node_modules, then the fork root's (bun hoists unconflicted deps there).
       // Without this the package's own node_modules symlink (→ the Chalkbag
       // app's) wins the hierarchical walk and skews JS/native versions (Skia!).
+      // SUBPATH imports (e.g. skia's lib/module/skia/NativeSetup) need the
+      // extension probe — a bare fs.existsSync misses `<path>.js` and the
+      // request would fall through to the app's copy.
       if (hasWallScene && context.originModulePath && context.originModulePath.startsWith(WALL_SCENE)) {
         const rootCandidate = path.join(root, 'node_modules', moduleName)
-        const target = projectNodeModulesMap[moduleName]
-          ?? (fs.existsSync(rootCandidate) ? rootCandidate : null)
+        const rootExists = ['', '.js', '.ts', '.tsx', '.json'].some(ext => fs.existsSync(rootCandidate + ext))
+        const target = projectNodeModulesMap[moduleName] ?? (rootExists ? rootCandidate : null)
         if (target) {
           return context.resolveRequest(context, target, platform);
         }
